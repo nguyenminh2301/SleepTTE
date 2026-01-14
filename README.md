@@ -9,6 +9,7 @@ A precision medicine platform for analyzing sleep-brain aging associations using
 ## 🎯 Overview
 
 This project develops:
+
 1. **Sleep-to-Brain Aging Signatures** from actigraphy and multimodal biomarkers
 2. **Target Trial Emulation** for sleep interventions (dCBT-I, OSA treatment, circadian regularity)
 3. **Digital Sleep Platform** with patient and clinician interfaces for personalized interventions
@@ -123,6 +124,7 @@ cp .env.example .env
 ### 2. Configure Data Access
 
 See [docs/data_access_guide.md](docs/data_access_guide.md) for instructions on:
+
 - Registering for OASIS-3 brain MRI data
 - Requesting NSRR MESA sleep data
 - Downloading PhysioNet sample data
@@ -155,33 +157,37 @@ streamlit run platform/clinician_dashboard.py
 
 ## 📊 Data Requirements
 
-| Data Type | Source | Access |
-|-----------|--------|--------|
-| Brain MRI/PET | OASIS-3 | [Request Access](https://www.oasis-brains.org/) |
-| Sleep PSG/Actigraphy | NSRR MESA | [Request Access](https://sleepdata.org/) |
-| Sample Sleep Data | PhysioNet | Open Access |
+| Data Type            | Source    | Access                                       |
+| -------------------- | --------- | -------------------------------------------- |
+| Brain MRI/PET        | OASIS-3   | [Request Access](https://www.oasis-brains.org/) |
+| Sleep PSG/Actigraphy | NSRR MESA | [Request Access](https://sleepdata.org/)        |
+| Sample Sleep Data    | PhysioNet | Open Access                                  |
 
 ## 🔬 Methodology
 
 ### Sleep Feature Extraction
+
 - Cole-Kripke algorithm for sleep/wake detection
 - Circadian metrics: IS, IV, relative amplitude, acrophase
 - Sleep architecture: TST, efficiency, WASO, fragmentation
 - Sleep regularity index (SRI), social jet lag
 
 ### Brain Aging Signature
+
 - Brain age prediction using elastic net, random forest, gradient boosting
 - Brain age gap = Predicted age - Chronological age
 - Sex-stratified models
 
 ### Target Trial Emulation
-| Intervention | Target Population | Primary Outcome |
-|--------------|-------------------|-----------------|
-| dCBT-I | Insomnia symptoms | Brain age acceleration |
-| OSA Treatment | AHI ≥ 15 | Hippocampal volume |
-| Circadian Regularity | IS < 0.5 | Cognitive trajectory |
+
+| Intervention         | Target Population | Primary Outcome        |
+| -------------------- | ----------------- | ---------------------- |
+| dCBT-I               | Insomnia symptoms | Brain age acceleration |
+| OSA Treatment        | AHI ≥ 15         | Hippocampal volume     |
+| Circadian Regularity | IS < 0.5          | Cognitive trajectory   |
 
 ### Causal Inference
+
 - Propensity score estimation (super learner)
 - Inverse probability of treatment weighting (IPTW)
 - Sensitivity analysis (E-values)
@@ -202,11 +208,11 @@ pytest --cov=src tests/
 If you use this code, please cite:
 
 ```bibtex
-@software{tte2026_sleep,
-  title = {TTE2026\_sleep: Precision Sleep for Brain Aging},
-  author = {Your Name},
+@software{sleeptte,
+  title = {Precision Sleep for Brain Aging},
+  author = {Minh Nguyen},
   year = {2026},
-  url = {https://github.com/yourusername/TTE2026_sleep}
+  url = {https://github.com/yourusername/SleepTTE}
 }
 ```
 
