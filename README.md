@@ -104,8 +104,8 @@ TTE2026_sleep/
 ### 1. Clone and Setup
 
 ```bash
-git clone https://github.com/yourusername/TTE2026_sleep.git
-cd TTE2026_sleep
+git clone https://github.com/nguyenminh2301/SleepTTE.git
+cd SleepTTE
 
 # Create virtual environment
 python -m venv .venv
@@ -212,7 +212,7 @@ If you use this code, please cite:
   title = {Precision Sleep for Brain Aging},
   author = {Minh Nguyen},
   year = {2026},
-  url = {https://github.com/yourusername/SleepTTE}
+  url = {https://github.com/nguyenminh2301/SleepTTE}
 }
 ```
 
@@ -232,4 +232,4 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) for deta
 
 - **Project Lead**: Minh Nguyen
 - **Email**: minhnt@ump.edu.vn
-- **Issues**: [GitHub Issues](https://github.com/yourusername/TTE2026_sleep/issues)
+- **Issues**: [GitHub Issues](https://github.com/nguyenminh2301/SleepTTE/issues)
