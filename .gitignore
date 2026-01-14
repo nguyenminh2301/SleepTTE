@@ -1,0 +1,193 @@
+# TTE2026_sleep - Precision Sleep for Brain Aging
+
+# ===========================
+# DATA FILES - NEVER COMMIT
+# ===========================
+
+# Archive (legacy/hidden files)
+archive/
+
+# Raw data (contains PHI/sensitive information)
+data/raw/
+data/external/
+data/interim/
+data/processed/
+
+# Large data files
+*.csv
+*.tsv
+*.parquet
+*.feather
+*.h5
+*.hdf5
+*.mat
+*.npy
+*.npz
+*.pkl
+*.pickle
+
+# Neuroimaging data
+*.nii
+*.nii.gz
+*.edf
+*.bdf
+*.fif
+*.vhdr
+*.vmrk
+*.eeg
+*.dcm
+DICOM/
+
+# ===========================
+# SENSITIVE CONFIGURATIONS
+# ===========================
+
+# Environment variables (API keys, passwords)
+.env
+.env.local
+.env.*.local
+*.env
+
+# Configuration with secrets
+config/secrets.yaml
+config/credentials.yaml
+config/local_config.yaml
+
+# API tokens
+.nsrr_token
+.nitrc_credentials
+.ukbiobank_key
+
+# ===========================
+# OUTPUT FILES
+# ===========================
+
+# Model outputs (can be large)
+outputs/models/
+outputs/checkpoints/
+*.pt
+*.pth
+*.h5
+*.keras
+*.joblib
+*.model
+
+# Large result files
+outputs/figures/*.png
+outputs/figures/*.pdf
+outputs/reports/*.html
+
+# Logs
+logs/
+*.log
+
+# ===========================
+# PYTHON / JUPYTER
+# ===========================
+
+# Byte-compiled / optimized
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+.conda/
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb
+
+# ===========================
+# IDE / EDITORS
+# ===========================
+
+# VSCode
+.vscode/
+*.code-workspace
+
+# PyCharm
+.idea/
+*.iml
+
+# Spyder
+.spyproject/
+.spyderproject
+
+# ===========================
+# OS FILES
+# ===========================
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Linux
+*~
+
+# ===========================
+# MISC
+# ===========================
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+*.bak
+*.swp
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+
+# Test cache
+.pytest_cache/
+.tox/
+.nox/
+
+# Documentation builds
+docs/_build/
+
+# ===========================
+# KEEP THESE FILES
+# ===========================
+
+# Keep directory structure
+!data/raw/.gitkeep
+!data/external/.gitkeep
+!data/interim/.gitkeep
+!data/processed/.gitkeep
+!outputs/models/.gitkeep
+!outputs/figures/.gitkeep
+!outputs/reports/.gitkeep
+# ===========================
+# AGENT ARTIFACTS
+# ===========================
+task.md
+implementation_plan.md
+walkthrough.md
+*.webp
+.gemini/
+

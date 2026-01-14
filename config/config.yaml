@@ -1,0 +1,179 @@
+# TTE2026_sleep Configuration File
+
+# Data Paths
+data:
+  raw_dir: "data/raw"
+  processed_dir: "data/processed"
+  actigraphy_file: "data/raw/actigraphy.csv"
+  mri_file: "data/raw/mri_biomarkers.csv"
+  pet_file: "data/raw/pet_biomarkers.csv"
+  plasma_file: "data/raw/plasma_biomarkers.csv"
+  meg_file: "data/raw/meg_features.csv"
+  clinical_file: "data/raw/clinical_data.csv"
+
+# Output Paths
+output:
+  figures_dir: "outputs/figures"
+  tables_dir: "outputs/tables"
+  models_dir: "outputs/models"
+  reports_dir: "outputs/reports"
+
+# Sleep Feature Extraction
+sleep_features:
+  # Actigraphy algorithm
+  algorithm: "cole_kripke"  # Options: cole_kripke, sadeh, sazonov
+  
+  # Sleep/wake threshold
+  threshold: 0.04
+  
+  # Circadian analysis window (days)
+  circadian_window: 7
+  
+  # Minimum valid days for analysis
+  min_valid_days: 5
+  
+  # Features to extract
+  features:
+    - total_sleep_time
+    - sleep_efficiency
+    - sleep_onset_latency
+    - wake_after_sleep_onset
+    - number_of_awakenings
+    - fragmentation_index
+    - interdaily_stability
+    - intradaily_variability
+    - relative_amplitude
+    - acrophase
+    - sleep_regularity_index
+    - social_jet_lag
+
+# Brain Aging Biomarkers
+brain_biomarkers:
+  # MRI-derived brain age
+  brain_age_model: "DeepBrainNet"  # Pre-trained model
+  
+  # Regional volumes of interest
+  roi_volumes:
+    - hippocampus
+    - entorhinal_cortex
+    - precuneus
+    - posterior_cingulate
+  
+  # PET biomarkers
+  pet_tracers:
+    - amyloid_suvr  # Florbetapir/Florbetaben
+    - tau_suvr      # Flortaucipir
+  
+  # Plasma biomarkers
+  plasma_markers:
+    - abeta42_40_ratio
+    - ptau181
+    - ptau217
+    - nfl
+    - gfap
+
+# Target Trial Emulation
+target_trials:
+  # Trial 1: dCBT-I
+  dcbt_i:
+    eligibility:
+      insomnia_severity_index: ">= 10"
+      baseline_sleep_efficiency: "< 85"
+    treatment_definition:
+      sessions_completed: ">= 4"
+      adherence_rate: ">= 0.7"
+    follow_up_months: 24
+  
+  # Trial 2: OSA Treatment
+  osa_treatment:
+    eligibility:
+      ahi_threshold: ">= 15"  # Moderate-severe OSA
+      ess_score: ">= 10"      # Excessive daytime sleepiness
+    treatment_definition:
+      cpap_adherence: ">= 4 hours/night"
+      adherence_nights: ">= 70%"
+    follow_up_months: 24
+  
+  # Trial 3: Circadian Regularity
+  circadian_regularity:
+    eligibility:
+      sleep_timing_variability: ">= 90 min"
+      social_jet_lag: ">= 2 hours"
+    intervention_definition:
+      sleep_timing_variability_reduction: ">= 50%"
+      regularity_improvement: ">= 0.2"  # SRI increase
+    follow_up_months: 24
+
+# Causal Inference
+causal_inference:
+  # Propensity score method
+  ps_method: "super_learner"  # Options: logistic, gbm, super_learner
+  
+  # Super learner base models
+  base_learners:
+    - logistic_regression
+    - gradient_boosting
+    - random_forest
+    - neural_network
+  
+  # IPTW settings
+  weight_truncation:
+    lower_percentile: 1
+    upper_percentile: 99
+  stabilized_weights: true
+  
+  # Balance assessment
+  smd_threshold: 0.1  # Standardized mean difference
+  
+  # Bootstrap settings
+  bootstrap_iterations: 1000
+  bootstrap_ci_level: 0.95
+  
+  # Sensitivity analysis
+  e_value_calculation: true
+
+# Risk Stratification
+risk_model:
+  # Model type
+  algorithm: "gradient_boosting"  # Options: logistic, random_forest, gradient_boosting, neural_net
+  
+  # Sex-stratified models
+  sex_stratified: true
+  
+  # Risk tiers
+  risk_thresholds:
+    low: 0.33
+    moderate: 0.67
+    high: 1.0
+  
+  # Cross-validation
+  cv_folds: 5
+  cv_repeats: 10
+  
+  # Feature selection
+  feature_selection: "elastic_net"
+  max_features: 20
+
+# Statistical Settings
+statistics:
+  alpha: 0.05
+  multiple_testing_correction: "fdr_bh"  # Benjamini-Hochberg
+  random_seed: 2026
+
+# Platform Settings
+platform:
+  # Authentication
+  require_authentication: true
+  session_timeout_minutes: 30
+  
+  # Data security
+  encrypt_patient_data: true
+  hipaa_compliant: true
+  
+  # Alerts
+  high_risk_alert_threshold: 0.8
+  poor_adherence_threshold: 0.5
+  
+  # Reporting
+  auto_generate_reports: true
+  report_frequency_days: 30

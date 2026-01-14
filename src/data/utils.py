@@ -1,0 +1,294 @@
+"""
+Data utility functions for TTE2026_sleep project
+Handles data loading, preprocessing, and validation
+"""
+
+import pandas as pd
+import numpy as np
+from pathlib import Path
+import yaml
+from typing import Dict, List, Tuple, Optional
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+def load_config(config_path: str = "config/config.yaml") -> Dict:
+    """Load configuration from YAML file"""
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+    return config
+
+
+def load_actigraphy_data(file_path: str) -> pd.DataFrame:
+    """
+    Load actigraphy data
+    
+    Expected columns:
+    - participant_id: Unique identifier
+    - timestamp: DateTime of measurement
+    - activity_counts: Activity counts per epoch
+    - sleep_wake: Sleep/wake classification (if available)
+    - wear_time: Whether device was worn
+    """
+    logger.info(f"Loading actigraphy data from {file_path}")
+    df = pd.read_csv(file_path)
+    
+    # Convert timestamp to datetime
+    if 'timestamp' in df.columns:
+        df['timestamp'] = pd.to_datetime(df['timestamp'])
+    
+    # Validate required columns
+    required_cols = ['participant_id', 'timestamp', 'activity_counts']
+    missing_cols = [col for col in required_cols if col not in df.columns]
+    if missing_cols:
+        raise ValueError(f"Missing required columns: {missing_cols}")
+    
+    logger.info(f"Loaded {len(df)} actigraphy records for {df['participant_id'].nunique()} participants")
+    return df
+
+
+def load_biomarker_data(file_path: str, biomarker_type: str) -> pd.DataFrame:
+    """
+    Load biomarker data (MRI, PET, plasma, MEG)
+    
+    Expected columns:
+    - participant_id: Unique identifier
+    - visit_date: Date of assessment
+    - [biomarker-specific columns]
+    """
+    logger.info(f"Loading {biomarker_type} biomarker data from {file_path}")
+    df = pd.read_csv(file_path)
+    
+    # Validate participant_id exists
+    if 'participant_id' not in df.columns:
+        raise ValueError("Missing required column: participant_id")
+    
+    logger.info(f"Loaded {biomarker_type} data for {df['participant_id'].nunique()} participants")
+    return df
+
+
+def load_clinical_data(file_path: str) -> pd.DataFrame:
+    """
+    Load clinical and demographic data
+    
+    Expected columns:
+    - participant_id: Unique identifier
+    - age: Age at baseline
+    - sex: Biological sex (M/F)
+    - education_years: Years of education
+    - apoe4_status: APOE4 carrier status (0/1/2)
+    - cognitive_status: CU/MCI/Dementia
+    """
+    logger.info(f"Loading clinical data from {file_path}")
+    df = pd.read_csv(file_path)
+    
+    required_cols = ['participant_id', 'age', 'sex']
+    missing_cols = [col for col in required_cols if col not in df.columns]
+    if missing_cols:
+        raise ValueError(f"Missing required columns: {missing_cols}")
+    
+    logger.info(f"Loaded clinical data for {df['participant_id'].nunique()} participants")
+    return df
+
+
+def merge_multimodal_data(
+    actigraphy: pd.DataFrame,
+    mri: pd.DataFrame,
+    pet: Optional[pd.DataFrame] = None,
+    plasma: Optional[pd.DataFrame] = None,
+    meg: Optional[pd.DataFrame] = None,
+    clinical: Optional[pd.DataFrame] = None,
+    time_window_days: int = 90
+) -> pd.DataFrame:
+    """
+    Merge multimodal data with temporal alignment
+    
+    Args:
+        actigraphy: Actigraphy data (aggregated to participant level)
+        mri: MRI biomarker data
+        pet: PET biomarker data (optional)
+        plasma: Plasma biomarker data (optional)
+        meg: MEG data (optional)
+        clinical: Clinical/demographic data (optional)
+        time_window_days: Maximum days between assessments for matching
+    
+    Returns:
+        Merged dataframe with all modalities
+    """
+    logger.info("Merging multimodal data...")
+    
+    # Start with MRI as anchor (most common biomarker)
+    merged = mri.copy()
+    
+    # Merge clinical data (no temporal constraint)
+    if clinical is not None:
+        merged = merged.merge(clinical, on='participant_id', how='left', suffixes=('', '_clinical'))
+    
+    # Merge other biomarkers with temporal alignment
+    for df, name in [(pet, 'PET'), (plasma, 'Plasma'), (meg, 'MEG')]:
+        if df is not None:
+            # Implement temporal matching logic here
+            # For now, simple merge on participant_id
+            merged = merged.merge(df, on='participant_id', how='left', suffixes=('', f'_{name.lower()}'))
+    
+    # Merge actigraphy (aggregated features)
+    if 'participant_id' in actigraphy.columns:
+        merged = merged.merge(actigraphy, on='participant_id', how='left', suffixes=('', '_actigraphy'))
+    
+    logger.info(f"Merged data contains {len(merged)} records for {merged['participant_id'].nunique()} participants")
+    return merged
+
+
+def quality_control_actigraphy(
+    df: pd.DataFrame,
+    min_wear_time_hours: float = 20.0,
+    min_valid_days: int = 5
+) -> pd.DataFrame:
+    """
+    Apply quality control filters to actigraphy data
+    
+    Args:
+        df: Actigraphy dataframe
+        min_wear_time_hours: Minimum wear time per day
+        min_valid_days: Minimum valid days required
+    
+    Returns:
+        Filtered dataframe with quality flags
+    """
+    logger.info("Applying quality control to actigraphy data...")
+    
+    # Calculate daily wear time
+    df['date'] = df['timestamp'].dt.date
+    daily_wear = df.groupby(['participant_id', 'date']).agg({
+        'wear_time': 'sum' if 'wear_time' in df.columns else 'count'
+    }).reset_index()
+    
+    # Assuming epochs are 1 minute
+    daily_wear['wear_hours'] = daily_wear['wear_time'] / 60
+    
+    # Flag valid days
+    daily_wear['valid_day'] = daily_wear['wear_hours'] >= min_wear_time_hours
+    
+    # Count valid days per participant
+    valid_days_count = daily_wear.groupby('participant_id')['valid_day'].sum().reset_index()
+    valid_days_count.columns = ['participant_id', 'n_valid_days']
+    
+    # Filter participants with sufficient valid days
+    valid_participants = valid_days_count[valid_days_count['n_valid_days'] >= min_valid_days]['participant_id']
+    
+    df_filtered = df[df['participant_id'].isin(valid_participants)].copy()
+    
+    logger.info(f"Quality control: {len(valid_participants)}/{df['participant_id'].nunique()} participants retained")
+    return df_filtered
+
+
+def handle_missing_data(
+    df: pd.DataFrame,
+    strategy: str = 'drop',
+    threshold: float = 0.5
+) -> pd.DataFrame:
+    """
+    Handle missing data
+    
+    Args:
+        df: Input dataframe
+        strategy: 'drop', 'impute_mean', 'impute_median', 'mice'
+        threshold: Maximum proportion of missing values allowed per column
+    
+    Returns:
+        Dataframe with missing data handled
+    """
+    logger.info(f"Handling missing data with strategy: {strategy}")
+    
+    # Calculate missing proportions
+    missing_props = df.isnull().sum() / len(df)
+    
+    # Drop columns with too much missing data
+    cols_to_drop = missing_props[missing_props > threshold].index.tolist()
+    if cols_to_drop:
+        logger.warning(f"Dropping {len(cols_to_drop)} columns with >{threshold*100}% missing: {cols_to_drop}")
+        df = df.drop(columns=cols_to_drop)
+    
+    if strategy == 'drop':
+        df = df.dropna()
+    elif strategy == 'impute_mean':
+        numeric_cols = df.select_dtypes(include=[np.number]).columns
+        df[numeric_cols] = df[numeric_cols].fillna(df[numeric_cols].mean())
+    elif strategy == 'impute_median':
+        numeric_cols = df.select_dtypes(include=[np.number]).columns
+        df[numeric_cols] = df[numeric_cols].fillna(df[numeric_cols].median())
+    elif strategy == 'mice':
+        # Implement MICE imputation if needed
+        logger.warning("MICE imputation not yet implemented, using median imputation")
+        numeric_cols = df.select_dtypes(include=[np.number]).columns
+        df[numeric_cols] = df[numeric_cols].fillna(df[numeric_cols].median())
+    
+    logger.info(f"After handling missing data: {len(df)} records retained")
+    return df
+
+
+def create_analysis_dataset(config: Dict) -> pd.DataFrame:
+    """
+    Create complete analysis dataset by loading and merging all data sources
+    
+    Args:
+        config: Configuration dictionary
+    
+    Returns:
+        Analysis-ready dataframe
+    """
+    logger.info("Creating analysis dataset...")
+    
+    # Load all data sources
+    clinical = load_clinical_data(config['data']['clinical_file'])
+    
+    # Load biomarkers
+    mri = load_biomarker_data(config['data']['mri_file'], 'MRI')
+    
+    # Optional biomarkers
+    try:
+        pet = load_biomarker_data(config['data']['pet_file'], 'PET')
+    except FileNotFoundError:
+        logger.warning("PET data not found, proceeding without it")
+        pet = None
+    
+    try:
+        plasma = load_biomarker_data(config['data']['plasma_file'], 'Plasma')
+    except FileNotFoundError:
+        logger.warning("Plasma data not found, proceeding without it")
+        plasma = None
+    
+    try:
+        meg = load_biomarker_data(config['data']['meg_file'], 'MEG')
+    except FileNotFoundError:
+        logger.warning("MEG data not found, proceeding without it")
+        meg = None
+    
+    # Actigraphy will be processed separately and aggregated
+    # For now, assume we have aggregated sleep features
+    
+    # Merge all data
+    analysis_df = merge_multimodal_data(
+        actigraphy=pd.DataFrame(),  # Placeholder
+        mri=mri,
+        pet=pet,
+        plasma=plasma,
+        meg=meg,
+        clinical=clinical
+    )
+    
+    # Handle missing data
+    analysis_df = handle_missing_data(analysis_df, strategy='drop', threshold=0.5)
+    
+    logger.info(f"Analysis dataset created: {len(analysis_df)} records, {len(analysis_df.columns)} features")
+    return analysis_df
+
+
+def save_processed_data(df: pd.DataFrame, filename: str, output_dir: str = "data/processed"):
+    """Save processed data to CSV"""
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    output_path = Path(output_dir) / filename
+    df.to_csv(output_path, index=False)
+    logger.info(f"Saved processed data to {output_path}")

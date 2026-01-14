@@ -1,0 +1,134 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tte2026-sleep"
+version = "0.1.0"
+description = "Precision Sleep Analysis Platform for Brain Aging Research"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+authors = [
+    {name = "Minh Nguyen", email = "minhnt@ump.edu.vn"}
+]
+keywords = [
+    "sleep",
+    "brain aging",
+    "actigraphy",
+    "causal inference",
+    "target trial emulation",
+    "neuroimaging"
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+
+dependencies = [
+    "numpy>=1.21.0",
+    "pandas>=1.3.0",
+    "scipy>=1.7.0",
+    "scikit-learn>=1.0.0",
+    "statsmodels>=0.13.0",
+    "matplotlib>=3.5.0",
+    "seaborn>=0.12.0",
+    "plotly>=5.0.0",
+    "streamlit>=1.20.0",
+    "pyyaml>=6.0",
+    "python-dotenv>=0.19.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "isort>=5.12.0",
+    "mypy>=1.0.0",
+    "pre-commit>=3.0.0",
+]
+neuroimaging = [
+    "nibabel>=4.0.0",
+    "nilearn>=0.10.0",
+]
+sleep = [
+    "mne>=1.3.0",
+    "yasa>=0.6.0",
+    "pyActigraphy>=1.0.0",
+]
+all = [
+    "tte2026-sleep[dev,neuroimaging,sleep]",
+]
+
+[project.urls]
+Homepage = "https://github.com/yourusername/TTE2026_sleep"
+Documentation = "https://github.com/yourusername/TTE2026_sleep#readme"
+Repository = "https://github.com/yourusername/TTE2026_sleep.git"
+Issues = "https://github.com/yourusername/TTE2026_sleep/issues"
+
+[project.scripts]
+tte-sleep = "src.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*", "platform*"]
+
+[tool.black]
+line-length = 88
+target-version = ['py39', 'py310', 'py311']
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+    | \.hg
+    | \.mypy_cache
+    | \.tox
+    | \.venv
+    | _build
+    | buck-out
+    | build
+    | dist
+    | data
+    | outputs
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 88
+skip = [".git", ".venv", "data", "outputs"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+exclude = ["data", "outputs", "notebooks"]
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["tests/*", "*/migrations/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
