@@ -39,7 +39,7 @@ sleep_features:
     - sleep_onset_latency
     - wake_after_sleep_onset
     - number_of_awakenings
-    - fragmentation_index
+    - sleep_fragmentation_index
     - interdaily_stability
     - intradaily_variability
     - relative_amplitude

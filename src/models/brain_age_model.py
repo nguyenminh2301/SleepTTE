@@ -7,13 +7,16 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 import sys
+import warnings
 sys.path.append(str(Path(__file__).parent.parent))
 
-from sklearn.model_selection import cross_val_score, GridSearchCV
+from sklearn.model_selection import cross_val_score, cross_val_predict, GridSearchCV, KFold
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import ElasticNet, Ridge
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from sklearn.dummy import DummyRegressor
 from sklearn.metrics import mean_absolute_error, r2_score
+from sklearn.exceptions import ConvergenceWarning
 import matplotlib.pyplot as plt
 import seaborn as sns
 from src.data.utils import load_config
@@ -22,6 +25,27 @@ import logging
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def prepare_feature_matrix(X: pd.DataFrame) -> pd.DataFrame:
+    """
+    Prepare model feature matrix and ensure no NaN values remain.
+    """
+    X_prepared = X.copy()
+
+    # Median imputation first, then handle all-NaN columns with zeros.
+    medians = X_prepared.median(numeric_only=True)
+    X_prepared = X_prepared.fillna(medians)
+
+    remaining_nan_cols = X_prepared.columns[X_prepared.isna().any()].tolist()
+    if remaining_nan_cols:
+        logger.warning(
+            "Columns with all-missing values detected; filling with 0: %s",
+            remaining_nan_cols
+        )
+        X_prepared[remaining_nan_cols] = X_prepared[remaining_nan_cols].fillna(0.0)
+
+    return X_prepared
 
 
 def load_integrated_data():
@@ -57,7 +81,7 @@ def select_sleep_features(data, config):
 def build_brain_aging_model(
     X: pd.DataFrame,
     y: pd.Series,
-    model_type: str = 'elastic_net'
+    model_type: str = 'auto'
 ) -> tuple:
     """
     Build predictive model for brain aging
@@ -65,83 +89,138 @@ def build_brain_aging_model(
     Args:
         X: Feature matrix (sleep features)
         y: Target variable (brain age delta or other biomarker)
-        model_type: Type of model to use
+        model_type: Type of model to use. Use 'auto' to select the best model by OOF MAE.
     
     Returns:
         Tuple of (fitted model, predictions, metrics)
     """
-    logger.info(f"Building {model_type} model...")
-    
-    # Standardize features
+    logger.info(f"Building model: {model_type}")
+
+    X_prepared = prepare_feature_matrix(X)
     scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
-    
-    # Select model
-    if model_type == 'elastic_net':
-        model = ElasticNet(random_state=2026)
-        param_grid = {
-            'alpha': [0.001, 0.01, 0.1, 1.0],
-            'l1_ratio': [0.1, 0.3, 0.5, 0.7, 0.9]
-        }
-    elif model_type == 'ridge':
-        model = Ridge(random_state=2026)
-        param_grid = {'alpha': [0.001, 0.01, 0.1, 1.0, 10.0]}
-    elif model_type == 'random_forest':
-        model = RandomForestRegressor(n_estimators=100, random_state=2026)
-        param_grid = {
-            'max_depth': [3, 5, 10, None],
-            'min_samples_split': [2, 5, 10]
-        }
-    elif model_type == 'gradient_boosting':
-        model = GradientBoostingRegressor(n_estimators=100, random_state=2026)
-        param_grid = {
-            'learning_rate': [0.01, 0.1, 0.2],
-            'max_depth': [3, 5, 7]
-        }
-    else:
-        raise ValueError(f"Unknown model type: {model_type}")
-    
-    # Grid search with cross-validation
-    grid_search = GridSearchCV(
-        model,
-        param_grid,
-        cv=5,
-        scoring='neg_mean_absolute_error',
-        n_jobs=-1
-    )
-    
-    grid_search.fit(X_scaled, y)
-    best_model = grid_search.best_estimator_
-    
-    # Cross-validated predictions
-    cv_scores = cross_val_score(
-        best_model,
-        X_scaled,
-        y,
-        cv=5,
-        scoring='neg_mean_absolute_error'
-    )
-    
-    # Fit final model
-    best_model.fit(X_scaled, y)
-    predictions = best_model.predict(X_scaled)
-    
-    # Calculate metrics
-    mae = mean_absolute_error(y, predictions)
-    r2 = r2_score(y, predictions)
-    
-    metrics = {
-        'mae': mae,
-        'r2': r2,
-        'cv_mae_mean': -cv_scores.mean(),
-        'cv_mae_std': cv_scores.std(),
-        'best_params': grid_search.best_params_
+    X_scaled = scaler.fit_transform(X_prepared)
+    cv_strategy = KFold(n_splits=5, shuffle=True, random_state=2026)
+
+    model_candidates = {
+        'dummy_mean': (
+            DummyRegressor(strategy='mean'),
+            None
+        ),
+        'ridge': (
+            Ridge(random_state=2026),
+            {'alpha': [0.01, 0.1, 1.0, 10.0, 100.0]}
+        ),
+        'elastic_net': (
+            ElasticNet(random_state=2026, max_iter=20000, tol=1e-3),
+            {'alpha': [0.01, 0.1, 1.0, 10.0], 'l1_ratio': [0.2, 0.5, 0.8]}
+        ),
+        'random_forest': (
+            RandomForestRegressor(n_estimators=200, random_state=2026),
+            {'max_depth': [3, 5, 10, None], 'min_samples_split': [2, 5, 10]}
+        ),
+        'gradient_boosting': (
+            GradientBoostingRegressor(n_estimators=200, random_state=2026),
+            {'learning_rate': [0.01, 0.05, 0.1], 'max_depth': [2, 3, 5]}
+        ),
     }
-    
-    logger.info(f"Model performance: MAE={mae:.3f}, R²={r2:.3f}")
-    logger.info(f"CV MAE: {-cv_scores.mean():.3f} ± {cv_scores.std():.3f}")
-    
-    return best_model, scaler, predictions, metrics
+
+    if model_type != 'auto':
+        if model_type not in model_candidates:
+            raise ValueError(f"Unknown model type: {model_type}")
+        model_candidates = {model_type: model_candidates[model_type]}
+
+    leaderboard_rows = []
+    best_name = None
+    best_estimator = None
+    best_predictions = None
+    best_scores = None
+    best_params = {}
+    best_cv_mae = np.inf
+
+    for candidate_name, (candidate_model, candidate_grid) in model_candidates.items():
+        logger.info("Evaluating candidate: %s", candidate_name)
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=ConvergenceWarning)
+            if candidate_grid:
+                search = GridSearchCV(
+                    candidate_model,
+                    candidate_grid,
+                    cv=cv_strategy,
+                    scoring='neg_mean_absolute_error',
+                    n_jobs=-1,
+                    error_score='raise'
+                )
+                search.fit(X_scaled, y)
+                estimator = search.best_estimator_
+                params = search.best_params_
+            else:
+                estimator = candidate_model
+                estimator.fit(X_scaled, y)
+                params = {}
+
+            cv_predictions = cross_val_predict(
+                estimator,
+                X_scaled,
+                y,
+                cv=cv_strategy,
+                n_jobs=-1
+            )
+            cv_scores = cross_val_score(
+                estimator,
+                X_scaled,
+                y,
+                cv=cv_strategy,
+                scoring='neg_mean_absolute_error',
+                n_jobs=-1
+            )
+
+        cv_mae = mean_absolute_error(y, cv_predictions)
+        cv_r2 = r2_score(y, cv_predictions)
+        leaderboard_rows.append(
+            {
+                'model': candidate_name,
+                'cv_mae': cv_mae,
+                'cv_r2': cv_r2,
+                'cv_mae_std': cv_scores.std(),
+                'best_params': params,
+            }
+        )
+
+        if cv_mae < best_cv_mae:
+            best_cv_mae = cv_mae
+            best_name = candidate_name
+            best_estimator = estimator
+            best_predictions = cv_predictions
+            best_scores = cv_scores
+            best_params = params
+
+    best_estimator.fit(X_scaled, y)
+    train_predictions = best_estimator.predict(X_scaled)
+
+    train_mae = mean_absolute_error(y, train_predictions)
+    train_r2 = r2_score(y, train_predictions)
+    cv_mae = mean_absolute_error(y, best_predictions)
+    cv_r2 = r2_score(y, best_predictions)
+
+    metrics = {
+        'selected_model': best_name,
+        'train_mae': train_mae,
+        'train_r2': train_r2,
+        'cv_mae': cv_mae,
+        'cv_r2': cv_r2,
+        'cv_mae_mean': -best_scores.mean(),
+        'cv_mae_std': best_scores.std(),
+        'best_params': best_params,
+    }
+
+    logger.info("Selected model: %s", best_name)
+    logger.info(f"Train performance: MAE={train_mae:.3f}, R2={train_r2:.3f}")
+    logger.info(f"OOF performance: MAE={cv_mae:.3f}, R2={cv_r2:.3f}")
+    logger.info(f"CV MAE: {-best_scores.mean():.3f} ± {best_scores.std():.3f}")
+
+    leaderboard_df = pd.DataFrame(leaderboard_rows).sort_values('cv_mae')
+    return best_estimator, scaler, best_predictions, metrics, leaderboard_df
 
 
 def calculate_sleep_brain_correlations(data, sleep_features, brain_biomarkers):
@@ -166,9 +245,10 @@ def generate_sleep_brain_signature(data, config):
     brain_biomarkers = ['brain_age_delta', 'hippocampal_volume', 'entorhinal_thickness']
     
     # Prepare feature matrix
-    X = data[sleep_features].fillna(data[sleep_features].median())
+    X = prepare_feature_matrix(data[sleep_features])
     
     results = {}
+    all_leaderboards = []
     
     # Build models for each brain biomarker
     for biomarker in brain_biomarkers:
@@ -177,24 +257,38 @@ def generate_sleep_brain_signature(data, config):
         y = data[biomarker].fillna(data[biomarker].median())
         
         # Build model
-        model, scaler, predictions, metrics = build_brain_aging_model(
-            X, y, model_type='elastic_net'
+        model, scaler, predictions, metrics, leaderboard = build_brain_aging_model(
+            X, y, model_type='auto'
         )
         
         results[biomarker] = {
             'model': model,
             'scaler': scaler,
             'predictions': predictions,
-            'metrics': metrics
+            'metrics': metrics,
+            'model_leaderboard': leaderboard
         }
+        leaderboard_with_target = leaderboard.copy()
+        leaderboard_with_target['biomarker'] = biomarker
+        all_leaderboards.append(leaderboard_with_target)
         
-        # Feature importance (for linear models)
+        # Feature importance
         if hasattr(model, 'coef_'):
             feature_importance = pd.DataFrame({
                 'feature': sleep_features,
                 'coefficient': model.coef_,
                 'abs_coefficient': np.abs(model.coef_)
             }).sort_values('abs_coefficient', ascending=False)
+        elif hasattr(model, 'feature_importances_'):
+            feature_importance = pd.DataFrame({
+                'feature': sleep_features,
+                'coefficient': model.feature_importances_,
+                'abs_coefficient': np.abs(model.feature_importances_)
+            }).sort_values('abs_coefficient', ascending=False)
+        else:
+            feature_importance = None
+
+        if feature_importance is not None:
             
             logger.info(f"\nTop 5 features for {biomarker}:")
             for idx, row in feature_importance.head(5).iterrows():
@@ -245,6 +339,10 @@ def generate_sleep_brain_signature(data, config):
         for biomarker in brain_biomarkers
     ])
     metrics_df.to_csv('outputs/tables/model_performance.csv', index=False)
+
+    if all_leaderboards:
+        leaderboard_df = pd.concat(all_leaderboards, ignore_index=True)
+        leaderboard_df.to_csv('outputs/tables/model_selection_leaderboard.csv', index=False)
     
     logger.info("\n" + "=" * 80)
     logger.info("Sleep-to-Brain Aging Signature Complete!")

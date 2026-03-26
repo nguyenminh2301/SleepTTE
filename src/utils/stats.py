@@ -9,7 +9,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import cross_val_predict
+from sklearn.model_selection import cross_val_predict, StratifiedKFold
 import statsmodels.api as sm
 from scipy import stats
 import logging
@@ -21,7 +21,8 @@ def estimate_propensity_scores(
     X: pd.DataFrame,
     treatment: pd.Series,
     method: str = 'super_learner',
-    base_learners: Optional[List[str]] = None
+    base_learners: Optional[List[str]] = None,
+    verbose: bool = True
 ) -> np.ndarray:
     """
     Estimate propensity scores for treatment assignment
@@ -35,7 +36,8 @@ def estimate_propensity_scores(
     Returns:
         Array of propensity scores (probability of treatment)
     """
-    logger.info(f"Estimating propensity scores using {method}")
+    if verbose:
+        logger.info(f"Estimating propensity scores using {method}")
     
     # Standardize features
     scaler = StandardScaler()
@@ -61,6 +63,15 @@ def estimate_propensity_scores(
         if base_learners is None:
             base_learners = ['logistic', 'gbm', 'random_forest']
         
+        treatment_array = np.asarray(treatment).astype(int)
+        class_counts = np.bincount(treatment_array)
+        min_class_count = class_counts.min() if len(class_counts) > 1 else 0
+        n_splits = min(5, min_class_count)
+
+        if n_splits < 2:
+            raise ValueError("Treatment must include at least 2 samples per class for super learner CV.")
+
+        cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=2026)
         predictions = []
         
         for learner in base_learners:
@@ -71,12 +82,25 @@ def estimate_propensity_scores(
             elif learner == 'random_forest':
                 model = RandomForestClassifier(n_estimators=100, random_state=2026)
             elif learner == 'neural_network':
-                model = MLPClassifier(hidden_layer_sizes=(50, 25), max_iter=500, random_state=2026)
+                model = MLPClassifier(
+                    hidden_layer_sizes=(32, 16),
+                    solver='lbfgs',
+                    alpha=0.001,
+                    max_iter=2000,
+                    random_state=2026
+                )
             else:
                 continue
             
             # Cross-validated predictions
-            pred = cross_val_predict(model, X_scaled, treatment, cv=5, method='predict_proba')[:, 1]
+            pred = cross_val_predict(
+                model,
+                X_scaled,
+                treatment,
+                cv=cv,
+                method='predict_proba',
+                n_jobs=-1
+            )[:, 1]
             predictions.append(pred)
         
         # Average predictions (simple ensemble)
@@ -88,7 +112,8 @@ def estimate_propensity_scores(
     # Clip extreme values
     ps = np.clip(ps, 0.01, 0.99)
     
-    logger.info(f"Propensity scores estimated. Mean: {ps.mean():.3f}, Range: [{ps.min():.3f}, {ps.max():.3f}]")
+    if verbose:
+        logger.info(f"Propensity scores estimated. Mean: {ps.mean():.3f}, Range: [{ps.min():.3f}, {ps.max():.3f}]")
     return ps
 
 
@@ -96,7 +121,8 @@ def calculate_iptw_weights(
     treatment: pd.Series,
     propensity_scores: np.ndarray,
     stabilized: bool = True,
-    truncate_percentiles: Optional[Tuple[float, float]] = (1, 99)
+    truncate_percentiles: Optional[Tuple[float, float]] = (1, 99),
+    verbose: bool = True
 ) -> np.ndarray:
     """
     Calculate inverse probability of treatment weights (IPTW)
@@ -110,7 +136,8 @@ def calculate_iptw_weights(
     Returns:
         Array of IPTW weights
     """
-    logger.info("Calculating IPTW weights")
+    if verbose:
+        logger.info("Calculating IPTW weights")
     
     # Calculate weights
     weights = np.where(
@@ -134,9 +161,11 @@ def calculate_iptw_weights(
         lower_bound = np.percentile(weights, lower)
         upper_bound = np.percentile(weights, upper)
         weights = np.clip(weights, lower_bound, upper_bound)
-        logger.info(f"Weights truncated at {lower}th and {upper}th percentiles")
+        if verbose:
+            logger.info(f"Weights truncated at {lower}th and {upper}th percentiles")
     
-    logger.info(f"IPTW weights calculated. Mean: {weights.mean():.3f}, Range: [{weights.min():.3f}, {weights.max():.3f}]")
+    if verbose:
+        logger.info(f"IPTW weights calculated. Mean: {weights.mean():.3f}, Range: [{weights.min():.3f}, {weights.max():.3f}]")
     return weights
 
 
@@ -208,7 +237,8 @@ def estimate_ate(
     outcome: pd.Series,
     treatment: pd.Series,
     weights: np.ndarray,
-    outcome_type: str = 'continuous'
+    outcome_type: str = 'continuous',
+    verbose: bool = True
 ) -> Dict:
     """
     Estimate average treatment effect (ATE) using IPTW
@@ -222,7 +252,8 @@ def estimate_ate(
     Returns:
         Dictionary with ATE estimate and standard error
     """
-    logger.info(f"Estimating ATE for {outcome_type} outcome")
+    if verbose:
+        logger.info(f"Estimating ATE for {outcome_type} outcome")
     
     if outcome_type == 'continuous':
         # Weighted mean difference
@@ -277,7 +308,8 @@ def estimate_ate(
         'p_value': p_value
     }
     
-    logger.info(f"ATE: {ate:.3f} (95% CI: [{ci_lower:.3f}, {ci_upper:.3f}], p={p_value:.4f})")
+    if verbose:
+        logger.info(f"ATE: {ate:.3f} (95% CI: [{ci_lower:.3f}, {ci_upper:.3f}], p={p_value:.4f})")
     return results
 
 
@@ -323,11 +355,27 @@ def bootstrap_ci(
         outcome_boot = boot_data[outcome_col]
         
         try:
-            ps_boot = estimate_propensity_scores(X_boot, treatment_boot, method='logistic')
-            weights_boot = calculate_iptw_weights(treatment_boot, ps_boot, stabilized=True)
+            ps_boot = estimate_propensity_scores(
+                X_boot,
+                treatment_boot,
+                method='logistic',
+                verbose=False
+            )
+            weights_boot = calculate_iptw_weights(
+                treatment_boot,
+                ps_boot,
+                stabilized=True,
+                verbose=False
+            )
             
             # Estimate ATE
-            ate_boot = estimate_ate(outcome_boot, treatment_boot, weights_boot, outcome_type='continuous')
+            ate_boot = estimate_ate(
+                outcome_boot,
+                treatment_boot,
+                weights_boot,
+                outcome_type='continuous',
+                verbose=False
+            )
             ate_estimates.append(ate_boot['ate'])
         except:
             # Skip failed iterations

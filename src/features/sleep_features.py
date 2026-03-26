@@ -56,25 +56,25 @@ def detect_sleep_wake(
     Args:
         activity_counts: Activity counts per epoch
         algorithm: 'cole_kripke', 'sadeh', or 'sazonov'
-        threshold: Threshold for sleep classification
+        threshold: Sleep probability threshold (0-1)
     
     Returns:
         Binary array (1 = sleep, 0 = wake)
     """
     if algorithm == 'cole_kripke':
         sleep_prob = cole_kripke_algorithm(activity_counts)
-        sleep_wake = (sleep_prob > (1 - threshold)).astype(int)
+        sleep_wake = (sleep_prob >= threshold).astype(int)
     
     elif algorithm == 'sadeh':
         # Simplified Sadeh algorithm
         # For production, implement full algorithm
         sleep_prob = cole_kripke_algorithm(activity_counts)
-        sleep_wake = (sleep_prob > (1 - threshold)).astype(int)
+        sleep_wake = (sleep_prob >= threshold).astype(int)
     
     elif algorithm == 'sazonov':
         # Simplified Sazonov algorithm
         sleep_prob = cole_kripke_algorithm(activity_counts)
-        sleep_wake = (sleep_prob > (1 - threshold)).astype(int)
+        sleep_wake = (sleep_prob >= threshold).astype(int)
     
     else:
         raise ValueError(f"Unknown algorithm: {algorithm}")

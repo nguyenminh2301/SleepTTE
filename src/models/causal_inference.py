@@ -151,6 +151,31 @@ def emulate_single_trial(data, trial_name, config):
     
     # Step 2: Define treatment
     trial_data = define_treatment_exposure(eligible_data, trial_name, config)
+
+    # Guard against degenerate datasets
+    if trial_data.empty:
+        logger.warning("No eligible participants for %s. Skipping trial.", trial_name)
+        return {
+            'trial_name': trial_name,
+            'n_eligible': 0,
+            'n_treated': 0,
+            'n_control': 0,
+            'skipped': True,
+            'skip_reason': 'No eligible participants'
+        }
+    if trial_data['treatment'].nunique() < 2:
+        logger.warning(
+            "Treatment has only one class for %s. Skipping trial.",
+            trial_name
+        )
+        return {
+            'trial_name': trial_name,
+            'n_eligible': len(trial_data),
+            'n_treated': int(trial_data['treatment'].sum()),
+            'n_control': int(len(trial_data) - trial_data['treatment'].sum()),
+            'skipped': True,
+            'skip_reason': 'Treatment indicator has one class'
+        }
     
     # Step 3: Select confounders
     trial_data, confounders = select_confounders(trial_data)
@@ -275,10 +300,13 @@ def run_all_trials(data, config):
     comparison_df = pd.DataFrame(comparison_data)
     
     # Create forest plot
-    forest_fig = plot_forest_plot(
-        comparison_df,
-        output_path='outputs/figures/comparative_effectiveness_forest.png'
-    )
+    if not comparison_df.empty:
+        plot_forest_plot(
+            comparison_df,
+            output_path='outputs/figures/comparative_effectiveness_forest.png'
+        )
+    else:
+        logger.warning("No comparable trial results available for forest plot.")
     
     # Save comparison table
     comparison_df.to_csv('outputs/tables/comparative_effectiveness.csv', index=False)
@@ -316,8 +344,8 @@ def main():
     logger.info("=" * 80)
     logger.info("\nResults saved to:")
     logger.info("  - outputs/tables/comparative_effectiveness.csv")
-    logger.info("  - outputs/figures/comparative_effectiveness_forest.png")
-    logger.info("  - outputs/figures/love_plot_*.png")
+    logger.info("  - outputs/figures/comparative_effectiveness_forest.(png/html)")
+    logger.info("  - outputs/figures/love_plot_*.(png/html)")
 
 
 if __name__ == "__main__":

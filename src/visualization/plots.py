@@ -21,6 +21,24 @@ plt.rcParams['font.size'] = 10
 plt.rcParams['font.family'] = 'sans-serif'
 
 
+def _write_plotly_figure(fig: go.Figure, output_path: str) -> None:
+    """
+    Save plotly figure to image. If Kaleido is unavailable, fall back to HTML.
+    """
+    try:
+        fig.write_image(output_path)
+        logger.info(f"Figure saved to {output_path}")
+    except ValueError as exc:
+        if "kaleido" not in str(exc).lower():
+            raise
+        html_path = str(output_path).rsplit(".", 1)[0] + ".html"
+        fig.write_html(html_path)
+        logger.warning(
+            "Kaleido is not installed. Saved interactive HTML instead: %s",
+            html_path
+        )
+
+
 def plot_love_plot(
     balance_df: pd.DataFrame,
     output_path: Optional[str] = None,
@@ -74,8 +92,7 @@ def plot_love_plot(
     )
     
     if output_path:
-        fig.write_image(output_path)
-        logger.info(f"Love plot saved to {output_path}")
+        _write_plotly_figure(fig, output_path)
     
     return fig
 
@@ -135,8 +152,7 @@ def plot_forest_plot(
     )
     
     if output_path:
-        fig.write_image(output_path)
-        logger.info(f"Forest plot saved to {output_path}")
+        _write_plotly_figure(fig, output_path)
     
     return fig
 
@@ -240,8 +256,7 @@ def plot_cumulative_incidence(
     )
     
     if output_path:
-        fig.write_image(output_path)
-        logger.info(f"Cumulative incidence plot saved to {output_path}")
+        _write_plotly_figure(fig, output_path)
     
     return fig
 
@@ -288,8 +303,7 @@ def plot_feature_importance(
     )
     
     if output_path:
-        fig.write_image(output_path)
-        logger.info(f"Feature importance plot saved to {output_path}")
+        _write_plotly_figure(fig, output_path)
     
     return fig
 
