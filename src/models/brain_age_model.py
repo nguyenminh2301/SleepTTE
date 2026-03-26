@@ -8,6 +8,7 @@ import numpy as np
 from pathlib import Path
 import sys
 import warnings
+from datetime import datetime, timezone
 sys.path.append(str(Path(__file__).parent.parent))
 
 from sklearn.model_selection import cross_val_score, cross_val_predict, GridSearchCV, KFold
@@ -17,6 +18,7 @@ from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.dummy import DummyRegressor
 from sklearn.metrics import mean_absolute_error, r2_score
 from sklearn.exceptions import ConvergenceWarning
+import joblib
 import matplotlib.pyplot as plt
 import seaborn as sns
 from src.data.utils import load_config
@@ -78,10 +80,61 @@ def select_sleep_features(data, config):
     return available_features
 
 
+def _resolve_modeling_config(config: dict, n_samples: int) -> dict:
+    """
+    Resolve modeling settings with safe defaults.
+    """
+    modeling_cfg = (config or {}).get('brain_modeling', {})
+    cv_folds = int(modeling_cfg.get('cv_folds', 5))
+    cv_folds = max(2, min(cv_folds, n_samples))
+
+    return {
+        'candidate_models': modeling_cfg.get(
+            'candidate_models',
+            ['dummy_mean', 'ridge', 'elastic_net', 'random_forest', 'gradient_boosting']
+        ),
+        'cv_folds': cv_folds,
+        'random_seed': int(modeling_cfg.get('random_seed', 2026)),
+        'n_jobs': int(modeling_cfg.get('n_jobs', -1)),
+    }
+
+
+def save_model_artifact(
+    biomarker: str,
+    model,
+    scaler: StandardScaler,
+    feature_names: list[str],
+    feature_defaults: dict[str, float],
+    metrics: dict,
+    output_dir: str = "outputs/models",
+) -> str:
+    """
+    Save trained model artifact for serving/inference.
+    """
+    artifact_dir = Path(output_dir)
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    artifact_path = artifact_dir / f"{biomarker}_model.joblib"
+
+    artifact = {
+        "biomarker": biomarker,
+        "model": model,
+        "scaler": scaler,
+        "feature_names": feature_names,
+        "feature_defaults": feature_defaults,
+        "metrics": metrics,
+        "created_at_utc": datetime.now(timezone.utc).isoformat(),
+        "artifact_version": "v1",
+    }
+    joblib.dump(artifact, artifact_path)
+    logger.info("Saved model artifact: %s", artifact_path)
+    return str(artifact_path)
+
+
 def build_brain_aging_model(
     X: pd.DataFrame,
     y: pd.Series,
-    model_type: str = 'auto'
+    model_type: str = 'auto',
+    model_config: dict | None = None,
 ) -> tuple:
     """
     Build predictive model for brain aging
@@ -99,7 +152,18 @@ def build_brain_aging_model(
     X_prepared = prepare_feature_matrix(X)
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X_prepared)
-    cv_strategy = KFold(n_splits=5, shuffle=True, random_state=2026)
+
+    cfg = model_config or {}
+    cv_folds = int(cfg.get('cv_folds', 5))
+    random_seed = int(cfg.get('random_seed', 2026))
+    n_jobs = int(cfg.get('n_jobs', -1))
+    candidate_list = cfg.get(
+        'candidate_models',
+        ['dummy_mean', 'ridge', 'elastic_net', 'random_forest', 'gradient_boosting']
+    )
+
+    cv_folds = max(2, min(cv_folds, len(y)))
+    cv_strategy = KFold(n_splits=cv_folds, shuffle=True, random_state=random_seed)
 
     model_candidates = {
         'dummy_mean': (
@@ -124,7 +188,16 @@ def build_brain_aging_model(
         ),
     }
 
-    if model_type != 'auto':
+    if model_type == 'auto':
+        model_candidates = {
+            k: v for k, v in model_candidates.items() if k in candidate_list
+        }
+        if not model_candidates:
+            logger.warning(
+                "No valid candidate_models configured. Falling back to dummy_mean."
+            )
+            model_candidates = {'dummy_mean': (DummyRegressor(strategy='mean'), None)}
+    else:
         if model_type not in model_candidates:
             raise ValueError(f"Unknown model type: {model_type}")
         model_candidates = {model_type: model_candidates[model_type]}
@@ -148,7 +221,7 @@ def build_brain_aging_model(
                     candidate_grid,
                     cv=cv_strategy,
                     scoring='neg_mean_absolute_error',
-                    n_jobs=-1,
+                    n_jobs=n_jobs,
                     error_score='raise'
                 )
                 search.fit(X_scaled, y)
@@ -164,7 +237,7 @@ def build_brain_aging_model(
                 X_scaled,
                 y,
                 cv=cv_strategy,
-                n_jobs=-1
+                n_jobs=n_jobs
             )
             cv_scores = cross_val_score(
                 estimator,
@@ -172,7 +245,7 @@ def build_brain_aging_model(
                 y,
                 cv=cv_strategy,
                 scoring='neg_mean_absolute_error',
-                n_jobs=-1
+                n_jobs=n_jobs
             )
 
         cv_mae = mean_absolute_error(y, cv_predictions)
@@ -243,6 +316,11 @@ def generate_sleep_brain_signature(data, config):
     # Select features
     sleep_features = select_sleep_features(data, config)
     brain_biomarkers = ['brain_age_delta', 'hippocampal_volume', 'entorhinal_thickness']
+    model_config = _resolve_modeling_config(config, n_samples=len(data))
+    feature_flags = config.get("feature_flags", {})
+    use_auto_selection = feature_flags.get("enable_model_auto_selection", True)
+    model_mode = "auto" if use_auto_selection else "elastic_net"
+    models_dir = config.get("output", {}).get("models_dir", "outputs/models")
     
     # Prepare feature matrix
     X = prepare_feature_matrix(data[sleep_features])
@@ -258,7 +336,7 @@ def generate_sleep_brain_signature(data, config):
         
         # Build model
         model, scaler, predictions, metrics, leaderboard = build_brain_aging_model(
-            X, y, model_type='auto'
+            X, y, model_type=model_mode, model_config=model_config
         )
         
         results[biomarker] = {
@@ -268,7 +346,22 @@ def generate_sleep_brain_signature(data, config):
             'metrics': metrics,
             'model_leaderboard': leaderboard
         }
+        feature_defaults = {
+            col: float(X[col].median()) if pd.notna(X[col].median()) else 0.0
+            for col in sleep_features
+        }
+        artifact_path = save_model_artifact(
+            biomarker=biomarker,
+            model=model,
+            scaler=scaler,
+            feature_names=sleep_features,
+            feature_defaults=feature_defaults,
+            metrics=metrics,
+            output_dir=models_dir,
+        )
+        results[biomarker]["artifact_path"] = artifact_path
         leaderboard_with_target = leaderboard.copy()
+        leaderboard_with_target['rank_by_cv_mae'] = np.arange(1, len(leaderboard_with_target) + 1)
         leaderboard_with_target['biomarker'] = biomarker
         all_leaderboards.append(leaderboard_with_target)
         

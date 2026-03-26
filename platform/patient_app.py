@@ -13,6 +13,7 @@ import sys
 sys.path.append(str(Path(__file__).parent.parent))
 
 from src.data.utils import load_config
+from src.utils.event_logger import log_event
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -188,14 +189,34 @@ def main():
         if patient_data:
             st.session_state['patient_data'] = patient_data
             st.sidebar.success(f"✓ Data loaded for {patient_id}")
+            log_event(
+                event_type="patient_data_loaded",
+                source="patient_app",
+                user_id=patient_id,
+                payload={"status": "success"}
+            )
         else:
             st.sidebar.error("Patient data not found")
+            log_event(
+                event_type="patient_data_loaded",
+                source="patient_app",
+                user_id=patient_id,
+                payload={"status": "not_found"}
+            )
     
     # Navigation
     page = st.sidebar.radio(
         "Navigation",
         ["Dashboard", "Sleep Report", "Brain Health", "Interventions", "Resources"]
     )
+    if st.session_state.get("_last_patient_page") != page:
+        log_event(
+            event_type="patient_page_view",
+            source="patient_app",
+            user_id=patient_id,
+            payload={"page": page}
+        )
+        st.session_state["_last_patient_page"] = page
     
     # Main content
     if 'patient_data' not in st.session_state:

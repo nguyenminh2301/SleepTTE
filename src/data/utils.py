@@ -7,17 +7,123 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 import yaml
-from typing import Dict, List, Tuple, Optional
+import os
+from typing import Dict, List, Tuple, Optional, Any
 import logging
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def load_config(config_path: str = "config/config.yaml") -> Dict:
-    """Load configuration from YAML file"""
-    with open(config_path, 'r') as f:
-        config = yaml.safe_load(f)
+def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+    """Recursively merge `override` into `base`."""
+    merged = dict(base)
+    for key, value in override.items():
+        if (
+            key in merged
+            and isinstance(merged[key], dict)
+            and isinstance(value, dict)
+        ):
+            merged[key] = _deep_merge(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def _load_yaml_file(path: Path) -> Dict[str, Any]:
+    with open(path, "r", encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+    if not isinstance(data, dict):
+        raise ValueError(f"Configuration file must contain a mapping: {path}")
+    return data
+
+
+def validate_config(config: Dict[str, Any]) -> None:
+    """Fail-fast validation for required configuration keys."""
+    required_top_level = [
+        "data",
+        "output",
+        "sleep_features",
+        "causal_inference",
+        "statistics",
+    ]
+    missing = [k for k in required_top_level if k not in config]
+    if missing:
+        raise ValueError(f"Missing required config sections: {missing}")
+
+    required_data_keys = [
+        "raw_dir",
+        "processed_dir",
+        "actigraphy_file",
+        "mri_file",
+        "clinical_file",
+    ]
+    missing_data = [k for k in required_data_keys if k not in config["data"]]
+    if missing_data:
+        raise ValueError(f"Missing required data config keys: {missing_data}")
+
+    if "features" not in config["sleep_features"] or not isinstance(config["sleep_features"]["features"], list):
+        raise ValueError("sleep_features.features must be a non-empty list")
+
+    if "brain_modeling" in config:
+        bm = config["brain_modeling"]
+        if "candidate_models" in bm and not isinstance(bm["candidate_models"], list):
+            raise ValueError("brain_modeling.candidate_models must be a list")
+        if "cv_folds" in bm and int(bm["cv_folds"]) < 2:
+            raise ValueError("brain_modeling.cv_folds must be >= 2")
+
+    if "api" in config:
+        api = config["api"]
+        if "brain_age_delta_artifact" in api and not isinstance(api["brain_age_delta_artifact"], str):
+            raise ValueError("api.brain_age_delta_artifact must be a string path")
+        if "allow_proxy_fallback" in api and not isinstance(api["allow_proxy_fallback"], bool):
+            raise ValueError("api.allow_proxy_fallback must be a boolean")
+        if "require_api_key" in api and not isinstance(api["require_api_key"], bool):
+            raise ValueError("api.require_api_key must be a boolean")
+        if "api_key" in api and not isinstance(api["api_key"], str):
+            raise ValueError("api.api_key must be a string")
+
+    # Always ensure feature_flags exists for forward-compatible toggles
+    if "feature_flags" not in config or not isinstance(config["feature_flags"], dict):
+        config["feature_flags"] = {}
+
+
+def load_config(
+    config_path: str = "config/config.yaml",
+    env: Optional[str] = None,
+    validate: bool = True
+) -> Dict[str, Any]:
+    """
+    Load configuration with optional environment overlay.
+
+    Resolution order:
+    1) base file: `config_path`
+    2) overlay file (if exists): `<config_dir>/<env>.yaml`
+       - `env` is function arg or `SLEEPTTE_ENV` environment variable
+    """
+    base_path = Path(config_path)
+    if not base_path.exists():
+        raise FileNotFoundError(f"Config file not found: {base_path}")
+
+    config = _load_yaml_file(base_path)
+
+    resolved_env = env or os.getenv("SLEEPTTE_ENV", "").strip()
+    if resolved_env:
+        env_path = base_path.parent / f"{resolved_env}.yaml"
+        if env_path.exists():
+            logger.info("Applying config overlay for env=%s from %s", resolved_env, env_path)
+            env_cfg = _load_yaml_file(env_path)
+            config = _deep_merge(config, env_cfg)
+        else:
+            logger.info(
+                "No overlay file found for env=%s at %s. Using base config only.",
+                resolved_env,
+                env_path
+            )
+
+    if validate:
+        validate_config(config)
+
     return config
 
 

@@ -1,8 +1,15 @@
 import numpy as np
 import pandas as pd
+import joblib
+from sklearn.dummy import DummyRegressor
+from sklearn.preprocessing import StandardScaler
 
 from src.features.sleep_features import detect_sleep_wake
-from src.models.brain_age_model import prepare_feature_matrix, build_brain_aging_model
+from src.models.brain_age_model import (
+    prepare_feature_matrix,
+    build_brain_aging_model,
+    save_model_artifact,
+)
 from src.utils.stats import estimate_propensity_scores
 
 
@@ -46,6 +53,32 @@ def test_build_brain_aging_model_reports_oof_metrics():
     assert "model" in leaderboard.columns
 
 
+def test_build_brain_aging_model_respects_candidate_models_config():
+    np.random.seed(2026)
+    X = pd.DataFrame(
+        {
+            "sleep_efficiency": np.random.normal(85, 4, 36),
+            "sleep_fragmentation_index": np.random.normal(5, 1.5, 36),
+            "social_jet_lag": np.random.uniform(0, 3, 36),
+        }
+    )
+    y = 0.25 * X["sleep_fragmentation_index"] - 0.1 * X["sleep_efficiency"] + np.random.normal(0, 1, 36)
+
+    model_config = {
+        "candidate_models": ["dummy_mean", "ridge"],
+        "cv_folds": 3,
+        "random_seed": 2026,
+        "n_jobs": 1,
+    }
+
+    _, _, _, metrics, leaderboard = build_brain_aging_model(
+        X, y, model_type="auto", model_config=model_config
+    )
+
+    assert set(leaderboard["model"]) <= {"dummy_mean", "ridge"}
+    assert metrics["selected_model"] in {"dummy_mean", "ridge"}
+
+
 def test_super_learner_propensity_scores_return_valid_probabilities():
     np.random.seed(2026)
     X = pd.DataFrame(
@@ -68,3 +101,28 @@ def test_super_learner_propensity_scores_return_valid_probabilities():
     assert len(ps) == len(treatment)
     assert np.all(ps >= 0.01)
     assert np.all(ps <= 0.99)
+
+
+def test_save_model_artifact_writes_expected_payload(tmp_path):
+    feature_names = ["sleep_efficiency", "sleep_fragmentation_index"]
+    x_train = np.array([[80.0, 10.0], [82.0, 8.0]], dtype=float)
+    y_train = np.array([1.2, 0.8], dtype=float)
+
+    scaler = StandardScaler().fit(x_train)
+    model = DummyRegressor(strategy="mean")
+    model.fit(scaler.transform(x_train), y_train)
+
+    artifact_path = save_model_artifact(
+        biomarker="brain_age_delta",
+        model=model,
+        scaler=scaler,
+        feature_names=feature_names,
+        feature_defaults={"sleep_efficiency": 81.0, "sleep_fragmentation_index": 9.0},
+        metrics={"cv_mae": 1.0},
+        output_dir=str(tmp_path),
+    )
+    loaded = joblib.load(artifact_path)
+
+    assert loaded["biomarker"] == "brain_age_delta"
+    assert loaded["artifact_version"] == "v1"
+    assert loaded["feature_names"] == feature_names

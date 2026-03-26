@@ -11,6 +11,7 @@ import plotly.express as px
 from pathlib import Path
 import sys
 sys.path.append(str(Path(__file__).parent.parent))
+from src.utils.event_logger import log_event
 
 # Page configuration
 st.set_page_config(
@@ -96,13 +97,30 @@ def main():
         "Select View",
         ["Patient Roster", "Individual Patient", "Population Analytics", "Intervention Management", "Reports"]
     )
+    if st.session_state.get("_last_clinician_page") != page:
+        log_event(
+            event_type="clinician_page_view",
+            source="clinician_dashboard",
+            payload={"page": page}
+        )
+        st.session_state["_last_clinician_page"] = page
     
     # Load data
     roster = load_patient_roster()
     
     if roster.empty:
         st.warning("No patient data available. Please run data processing pipeline first.")
+        log_event(
+            event_type="clinician_roster_load",
+            source="clinician_dashboard",
+            payload={"status": "empty"}
+        )
         return
+    log_event(
+        event_type="clinician_roster_load",
+        source="clinician_dashboard",
+        payload={"status": "ok", "n_patients": int(len(roster))}
+    )
     
     # Route to pages
     if page == "Patient Roster":

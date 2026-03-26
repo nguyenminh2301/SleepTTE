@@ -72,6 +72,20 @@ brain_biomarkers:
     - nfl
     - gfap
 
+# Brain Aging Modeling Pipeline (Round 4)
+brain_modeling:
+  # Candidates considered when model_type='auto'
+  candidate_models:
+    - dummy_mean
+    - ridge
+    - elastic_net
+    - random_forest
+    - gradient_boosting
+  # CV settings for OOF model selection
+  cv_folds: 5
+  random_seed: 2026
+  n_jobs: -1
+
 # Target Trial Emulation
 target_trials:
   # Trial 1: dCBT-I
@@ -159,6 +173,19 @@ statistics:
   alpha: 0.05
   multiple_testing_correction: "fdr_bh"  # Benjamini-Hochberg
   random_seed: 2026
+
+# Feature flags for controlled rollout
+feature_flags:
+  enable_model_auto_selection: true
+  enable_plotly_html_fallback: true
+  enable_strict_config_validation: true
+
+# API serving settings
+api:
+  brain_age_delta_artifact: "outputs/models/brain_age_delta_model.joblib"
+  allow_proxy_fallback: true
+  require_api_key: false
+  api_key: "dev-change-me"
 
 # Platform Settings
 platform:

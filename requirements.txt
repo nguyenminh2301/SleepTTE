@@ -36,6 +36,8 @@ nilearn>=0.10.0
 streamlit>=1.28.0
 streamlit-authenticator>=0.2.3
 plotly-express>=0.4.1
+fastapi>=0.115.0
+uvicorn>=0.30.0
 
 # Utilities
 pyyaml>=6.0

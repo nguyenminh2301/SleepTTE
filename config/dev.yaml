@@ -1,0 +1,17 @@
+# Development overrides
+
+brain_modeling:
+  cv_folds: 3
+  n_jobs: 1
+
+causal_inference:
+  bootstrap_iterations: 200
+
+platform:
+  require_authentication: false
+
+feature_flags:
+  enable_strict_config_validation: true
+
+api:
+  allow_proxy_fallback: true
