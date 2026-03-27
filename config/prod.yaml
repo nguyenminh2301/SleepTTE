@@ -17,3 +17,6 @@ api:
   allow_proxy_fallback: false
   require_api_key: true
   enable_role_policy: true
+
+identity:
+  mode: "jwt_hs256"

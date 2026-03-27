@@ -86,8 +86,28 @@ def validate_config(config: Dict[str, Any]) -> None:
             raise ValueError("api.enable_role_policy must be a boolean")
         if "event_log_path" in api and not isinstance(api["event_log_path"], str):
             raise ValueError("api.event_log_path must be a string path")
+        if "security_event_log_path" in api and not isinstance(api["security_event_log_path"], str):
+            raise ValueError("api.security_event_log_path must be a string path")
         if "role_requirements" in api and not isinstance(api["role_requirements"], dict):
             raise ValueError("api.role_requirements must be a dictionary")
+
+    if "identity" in config:
+        identity = config["identity"]
+        if "mode" in identity and identity["mode"] not in ["header", "jwt_hs256"]:
+            raise ValueError("identity.mode must be one of: header, jwt_hs256")
+        if "jwt_hs256_secret" in identity and not isinstance(identity["jwt_hs256_secret"], str):
+            raise ValueError("identity.jwt_hs256_secret must be a string")
+        if "jwt_user_id_claim" in identity and not isinstance(identity["jwt_user_id_claim"], str):
+            raise ValueError("identity.jwt_user_id_claim must be a string")
+        if "jwt_role_claim" in identity and not isinstance(identity["jwt_role_claim"], str):
+            raise ValueError("identity.jwt_role_claim must be a string")
+
+    if "operations" in config:
+        ops = config["operations"]
+        if "log_rotation_max_bytes" in ops and int(ops["log_rotation_max_bytes"]) <= 0:
+            raise ValueError("operations.log_rotation_max_bytes must be > 0")
+        if "log_rotation_backup_count" in ops and int(ops["log_rotation_backup_count"]) < 1:
+            raise ValueError("operations.log_rotation_backup_count must be >= 1")
 
     # Always ensure feature_flags exists for forward-compatible toggles
     if "feature_flags" not in config or not isinstance(config["feature_flags"], dict):

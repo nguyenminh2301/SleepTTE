@@ -188,6 +188,7 @@ api:
   api_key: "dev-change-me"
   enable_role_policy: false
   event_log_path: "logs/events.log"
+  security_event_log_path: "logs/security_events.log"
   role_requirements:
     config:
       - admin
@@ -201,6 +202,18 @@ api:
       - clinician
     events_summary:
       - admin
+
+# Identity settings for role policy
+identity:
+  mode: "header"  # options: header, jwt_hs256
+  jwt_hs256_secret: "dev-secret-change-me"
+  jwt_user_id_claim: "sub"
+  jwt_role_claim: "role"
+
+# Operational settings
+operations:
+  log_rotation_max_bytes: 5242880
+  log_rotation_backup_count: 3
 
 # Platform Settings
 platform:

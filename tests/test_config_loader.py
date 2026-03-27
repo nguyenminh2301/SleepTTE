@@ -90,3 +90,38 @@ def test_load_config_raises_on_invalid_role_requirements_type(tmp_path):
 
     with pytest.raises(ValueError, match="api.role_requirements must be a dictionary"):
         load_config(str(config_path), env=None)
+
+
+def test_load_config_raises_on_invalid_security_event_log_path_type(tmp_path):
+    config_path = tmp_path / "config" / "config.yaml"
+    cfg = _minimal_base_config()
+    cfg["api"] = {
+        "brain_age_delta_artifact": "outputs/models/brain_age_delta_model.joblib",
+        "allow_proxy_fallback": True,
+        "require_api_key": False,
+        "security_event_log_path": 123,
+    }
+    _write_yaml(config_path, cfg)
+
+    with pytest.raises(ValueError, match="api.security_event_log_path must be a string path"):
+        load_config(str(config_path), env=None)
+
+
+def test_load_config_raises_on_invalid_identity_mode(tmp_path):
+    config_path = tmp_path / "config" / "config.yaml"
+    cfg = _minimal_base_config()
+    cfg["identity"] = {"mode": "unknown-mode"}
+    _write_yaml(config_path, cfg)
+
+    with pytest.raises(ValueError, match="identity.mode must be one of: header, jwt_hs256"):
+        load_config(str(config_path), env=None)
+
+
+def test_load_config_raises_on_invalid_log_rotation_backup_count(tmp_path):
+    config_path = tmp_path / "config" / "config.yaml"
+    cfg = _minimal_base_config()
+    cfg["operations"] = {"log_rotation_backup_count": 0}
+    _write_yaml(config_path, cfg)
+
+    with pytest.raises(ValueError, match="operations.log_rotation_backup_count must be >= 1"):
+        load_config(str(config_path), env=None)

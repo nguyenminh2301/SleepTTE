@@ -26,10 +26,16 @@ Branch: `codex/round3-model-quality-readme`
 | M4.2-06 | Add model metadata endpoint for clients | DONE | P1 | 2026-03-27 | Added `/model/brain-age/metadata` + endpoint tests |
 | M4.3-01 | API role policy with user identity claims | DONE | P0 | 2026-03-27 | Added role checks via `X-User-Id` and `X-User-Role` |
 | M4.3-02 | Event log aggregation/report utility | DONE | P1 | 2026-03-27 | Added `summarize_event_log` + `/events/summary` endpoint |
-| M4.3-03 | API contract docs and usage examples | TODO | P1 | 2026-03-28 | OpenAPI + request/response examples |
-| M4.3-04 | Role claim source integration (real identity provider) | TODO | P0 | 2026-03-28 | Replace header-only claims with trusted identity flow |
+| M4.3-03 | API contract docs and usage examples | DONE | P1 | 2026-03-27 | Added `docs/api/API_CONTRACT.md` |
+| M4.3-04 | Role claim source integration (real identity provider) | DONE | P0 | 2026-03-27 | Added configurable `identity.mode` with JWT HS256 claims |
+| M4.3-05 | Event summary filters (time/source/type) | DONE | P1 | 2026-03-27 | Added query filters to `/events/summary` |
+| M4.3-06 | Security audit log for denied API requests | DONE | P1 | 2026-03-27 | Added `api_auth_failed` and `api_role_forbidden` logs |
+| M4.4-01 | Add OIDC/JWKS verification support | TODO | P0 | 2026-03-28 | Replace shared-secret JWT mode with provider keys |
+| M4.4-02 | Log retention + rotation policy | DONE | P1 | 2026-03-27 | Added rotation utility + `scripts/rotate_logs.py` |
+| M4.4-03 | Event summary time-bucket metrics | DONE | P1 | 2026-03-27 | Added `group_by` + `top_n` controls |
+| M4.4-04 | API endpoint for log maintenance status | TODO | P2 | 2026-03-28 | Expose last rotation metadata |
 
 ## Immediate Next Actions
-1. Start API contract docs (OpenAPI usage + examples).
-2. Integrate real identity provider for role claims.
-3. Add event-summary filters (time range, source, event type).
+1. Add OIDC/JWKS verification support for identity claims.
+2. Add pagination for raw event inspection endpoint.
+3. Add endpoint for log maintenance/rotation status.

@@ -14,11 +14,13 @@ import os
 import joblib
 import numpy as np
 import pandas as pd
+import jwt
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 
 from src.data.utils import load_config
 from src.utils.event_summary import summarize_event_log
+from src.utils.event_logger import log_event
 
 
 class BrainAgePredictionRequest(BaseModel):
@@ -131,7 +133,13 @@ def _risk_level(delta: float) -> Literal["low", "moderate", "high"]:
     return "high"
 
 
-def _enforce_api_key(cfg: dict, x_api_key: str | None) -> None:
+def _enforce_api_key(
+    cfg: dict,
+    x_api_key: str | None,
+    endpoint_key: str,
+    x_user_id: str | None,
+    x_user_role: str | None,
+) -> None:
     api_cfg = cfg.get("api", {})
     require_api_key = api_cfg.get("require_api_key", False)
     if not require_api_key:
@@ -139,7 +147,50 @@ def _enforce_api_key(cfg: dict, x_api_key: str | None) -> None:
 
     expected_api_key = os.getenv("SLEEPTTE_API_KEY", api_cfg.get("api_key", ""))
     if not expected_api_key or x_api_key != expected_api_key:
+        _log_security_event(
+            cfg=cfg,
+            event_type="api_auth_failed",
+            endpoint_key=endpoint_key,
+            user_id=x_user_id,
+            user_role=x_user_role,
+            reason="invalid_api_key",
+        )
         raise HTTPException(status_code=401, detail="Unauthorized: invalid API key.")
+
+
+def _resolve_identity_claims(
+    cfg: dict,
+    x_user_id: str | None,
+    x_user_role: str | None,
+    authorization: str | None,
+) -> tuple[str | None, str | None]:
+    identity_cfg = cfg.get("identity", {})
+    mode = identity_cfg.get("mode", "header")
+    if mode == "header":
+        return x_user_id, x_user_role
+
+    if mode == "jwt_hs256":
+        if not authorization or not authorization.lower().startswith("bearer "):
+            return None, None
+        token = authorization.split(" ", 1)[1].strip()
+        secret = os.getenv("SLEEPTTE_JWT_SECRET", identity_cfg.get("jwt_hs256_secret", ""))
+        if not secret:
+            return None, None
+        try:
+            decoded = jwt.decode(token, secret, algorithms=["HS256"])
+        except Exception:
+            return None, None
+
+        user_id_claim = identity_cfg.get("jwt_user_id_claim", "sub")
+        role_claim = identity_cfg.get("jwt_role_claim", "role")
+        user_id_val = decoded.get(user_id_claim)
+        role_val = decoded.get(role_claim)
+        return (
+            str(user_id_val) if user_id_val is not None else None,
+            str(role_val) if role_val is not None else None,
+        )
+
+    return x_user_id, x_user_role
 
 
 def _enforce_role_policy(
@@ -158,9 +209,47 @@ def _enforce_role_policy(
         return
 
     if not x_user_id or not x_user_role:
+        _log_security_event(
+            cfg=cfg,
+            event_type="api_auth_failed",
+            endpoint_key=endpoint_key,
+            user_id=x_user_id,
+            user_role=x_user_role,
+            reason="missing_identity_claims",
+        )
         raise HTTPException(status_code=401, detail="Unauthorized: missing identity claims.")
     if x_user_role not in allowed_roles:
+        _log_security_event(
+            cfg=cfg,
+            event_type="api_role_forbidden",
+            endpoint_key=endpoint_key,
+            user_id=x_user_id,
+            user_role=x_user_role,
+            reason="role_not_allowed",
+        )
         raise HTTPException(status_code=403, detail="Forbidden: role is not allowed for this endpoint.")
+
+
+def _log_security_event(
+    cfg: dict,
+    event_type: str,
+    endpoint_key: str,
+    user_id: str | None,
+    user_role: str | None,
+    reason: str,
+) -> None:
+    log_path = cfg.get("api", {}).get("security_event_log_path", "logs/security_events.log")
+    log_event(
+        event_type=event_type,
+        source="api",
+        user_id=user_id,
+        payload={
+            "endpoint": endpoint_key,
+            "user_role": user_role,
+            "reason": reason,
+        },
+        log_path=log_path,
+    )
 
 
 def create_app() -> FastAPI:
@@ -186,13 +275,23 @@ def create_app() -> FastAPI:
         x_api_key: str | None = Header(default=None, alias="X-API-Key"),
         x_user_id: str | None = Header(default=None, alias="X-User-Id"),
         x_user_role: str | None = Header(default=None, alias="X-User-Role"),
+        authorization: str | None = Header(default=None, alias="Authorization"),
     ) -> dict:
         try:
             cfg = load_config()
         except Exception as exc:
             raise HTTPException(status_code=500, detail=f"Failed to load config: {exc}") from exc
-        _enforce_api_key(cfg, x_api_key)
-        _enforce_role_policy(cfg, "config", x_user_id, x_user_role)
+        resolved_user_id, resolved_user_role = _resolve_identity_claims(
+            cfg, x_user_id, x_user_role, authorization
+        )
+        _enforce_api_key(
+            cfg,
+            x_api_key,
+            endpoint_key="config",
+            x_user_id=resolved_user_id,
+            x_user_role=resolved_user_role
+        )
+        _enforce_role_policy(cfg, "config", resolved_user_id, resolved_user_role)
 
         return {
             "data_paths": cfg.get("data", {}),
@@ -207,10 +306,20 @@ def create_app() -> FastAPI:
         x_api_key: str | None = Header(default=None, alias="X-API-Key"),
         x_user_id: str | None = Header(default=None, alias="X-User-Id"),
         x_user_role: str | None = Header(default=None, alias="X-User-Role"),
+        authorization: str | None = Header(default=None, alias="Authorization"),
     ) -> BrainAgePredictionResponse:
         cfg = load_config()
-        _enforce_api_key(cfg, x_api_key)
-        _enforce_role_policy(cfg, "predict_brain_age", x_user_id, x_user_role)
+        resolved_user_id, resolved_user_role = _resolve_identity_claims(
+            cfg, x_user_id, x_user_role, authorization
+        )
+        _enforce_api_key(
+            cfg,
+            x_api_key,
+            endpoint_key="predict_brain_age",
+            x_user_id=resolved_user_id,
+            x_user_role=resolved_user_role,
+        )
+        _enforce_role_policy(cfg, "predict_brain_age", resolved_user_id, resolved_user_role)
         api_cfg = cfg.get("api", {})
         allow_proxy_fallback = api_cfg.get("allow_proxy_fallback", True)
 
@@ -238,10 +347,20 @@ def create_app() -> FastAPI:
         x_api_key: str | None = Header(default=None, alias="X-API-Key"),
         x_user_id: str | None = Header(default=None, alias="X-User-Id"),
         x_user_role: str | None = Header(default=None, alias="X-User-Role"),
+        authorization: str | None = Header(default=None, alias="Authorization"),
     ) -> dict:
         cfg = load_config()
-        _enforce_api_key(cfg, x_api_key)
-        _enforce_role_policy(cfg, "model_metadata", x_user_id, x_user_role)
+        resolved_user_id, resolved_user_role = _resolve_identity_claims(
+            cfg, x_user_id, x_user_role, authorization
+        )
+        _enforce_api_key(
+            cfg,
+            x_api_key,
+            endpoint_key="model_metadata",
+            x_user_id=resolved_user_id,
+            x_user_role=resolved_user_role
+        )
+        _enforce_role_policy(cfg, "model_metadata", resolved_user_id, resolved_user_role)
 
         artifact = _load_brain_age_artifact(cfg)
         if artifact is None:
@@ -254,13 +373,37 @@ def create_app() -> FastAPI:
         x_api_key: str | None = Header(default=None, alias="X-API-Key"),
         x_user_id: str | None = Header(default=None, alias="X-User-Id"),
         x_user_role: str | None = Header(default=None, alias="X-User-Role"),
+        authorization: str | None = Header(default=None, alias="Authorization"),
+        start_time_utc: str | None = None,
+        end_time_utc: str | None = None,
+        event_type: str | None = None,
+        source: str | None = None,
+        group_by: str | None = None,
+        top_n: int | None = None,
     ) -> dict:
         cfg = load_config()
-        _enforce_api_key(cfg, x_api_key)
-        _enforce_role_policy(cfg, "events_summary", x_user_id, x_user_role)
+        resolved_user_id, resolved_user_role = _resolve_identity_claims(
+            cfg, x_user_id, x_user_role, authorization
+        )
+        _enforce_api_key(
+            cfg,
+            x_api_key,
+            endpoint_key="events_summary",
+            x_user_id=resolved_user_id,
+            x_user_role=resolved_user_role
+        )
+        _enforce_role_policy(cfg, "events_summary", resolved_user_id, resolved_user_role)
 
         log_path = cfg.get("api", {}).get("event_log_path", "logs/events.log")
-        return summarize_event_log(log_path)
+        return summarize_event_log(
+            log_path=log_path,
+            start_time_utc=start_time_utc,
+            end_time_utc=end_time_utc,
+            event_type=event_type,
+            source=source,
+            group_by=group_by,
+            top_n=top_n,
+        )
 
     return app
 

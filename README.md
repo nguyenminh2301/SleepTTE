@@ -147,6 +147,12 @@ Notes:
 - Role policy (optional):
   - `api.enable_role_policy=true` turns on role checks using headers `X-User-Id`, `X-User-Role`.
   - Role rules come from `api.role_requirements` per endpoint.
+  - Unauthorized/forbidden API attempts are logged to `api.security_event_log_path`.
+  - Identity source can be configured via `identity.mode` (`header` or `jwt_hs256`).
+
+API contract document:
+
+- `docs/api/API_CONTRACT.md`
 
 ## Testing
 
@@ -164,6 +170,13 @@ pytest -q
 
 - Platform events are appended to `logs/events.log` in JSONL format.
 - Current tracked events include page views and key data-load actions in patient/clinician apps.
+- Security access denials are logged to `logs/security_events.log` (configurable).
+
+Log maintenance:
+
+```bash
+python scripts/rotate_logs.py
+```
 
 ## Notes on current behavior
 

@@ -51,3 +51,28 @@
 - Decision: Expose event-log summary as API endpoint.
 - Reason: Allows quick observability without separate analytics stack.
 - Impact: Clients/admin dashboards can retrieve usage snapshots directly from backend.
+
+## D-2026-03-27-11
+- Decision: Add server-side filters to event summary endpoint.
+- Reason: Avoid transferring full summaries to clients when investigating specific time windows or event types.
+- Impact: `/events/summary` now supports `start_time_utc`, `end_time_utc`, `event_type`, and `source`.
+
+## D-2026-03-27-12
+- Decision: Emit dedicated security audit events on access-control denials.
+- Reason: Authentication/authorization failures need separate visibility from product interaction logs.
+- Impact: `api_auth_failed` and `api_role_forbidden` events are recorded to `api.security_event_log_path`.
+
+## D-2026-03-27-13
+- Decision: Support two identity-claim modes for API role enforcement: `header` and `jwt_hs256`.
+- Reason: Preserve existing local/dev workflow while enabling stronger claim source for production-like setups.
+- Impact: Role policy can consume trusted claims from Bearer JWT without changing endpoint contracts.
+
+## D-2026-03-27-14
+- Decision: Add time-bucket and top-category controls to event summary endpoint.
+- Reason: Operational dashboards need trend views and concise summaries without pulling full raw logs.
+- Impact: `/events/summary` now supports `group_by` and `top_n`.
+
+## D-2026-03-27-15
+- Decision: Implement size-based log rotation as first retention strategy.
+- Reason: Fast safeguard against uncontrolled log growth without requiring external log stack.
+- Impact: Added configurable rotation utility and script for event/security logs.

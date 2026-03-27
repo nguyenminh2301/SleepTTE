@@ -122,5 +122,57 @@
 - Verification complete:
   - `pytest -q` => 35/35 tests passed.
 
+## 2026-03-27 08:05 (Asia/Saigon)
+- Implemented API contract documentation:
+  - Added `docs/api/API_CONTRACT.md` with headers, endpoint contracts, and curl examples.
+- Extended `/events/summary` with optional filters:
+  - `start_time_utc`, `end_time_utc`, `event_type`, `source`
+- Added/updated tests for summary filtering and endpoint query behavior.
+- Verification complete:
+  - `pytest -q` => 36/36 tests passed.
+
+## 2026-03-27 08:18 (Asia/Saigon)
+- Added security audit logging for API access control failures:
+  - logs `api_auth_failed` and `api_role_forbidden` with endpoint/role/reason.
+  - configurable output path: `api.security_event_log_path`.
+- Added tests for security audit logging behavior.
+- Verification complete:
+  - `pytest -q` => 39/39 tests passed.
+
+## 2026-03-27 08:31 (Asia/Saigon)
+- Implemented configurable identity claim source for role policy:
+  - `identity.mode=header` (existing behavior)
+  - `identity.mode=jwt_hs256` (Bearer token claims)
+- Added JWT claim mapping settings:
+  - `identity.jwt_user_id_claim`
+  - `identity.jwt_role_claim`
+  - `identity.jwt_hs256_secret` (or `SLEEPTTE_JWT_SECRET`)
+- Added tests for:
+  - valid JWT role flow (`200`)
+  - invalid JWT signature (`401`)
+  - identity mode validation.
+- Verification complete:
+  - `pytest -q` => 42/42 tests passed.
+
+## 2026-03-27 08:40 (Asia/Saigon)
+- Extended event summary analytics:
+  - Added `group_by` (`hourly`/`daily`) support.
+  - Added `top_n` limiting for dominant categories.
+  - Exposed new query params on `GET /events/summary`.
+- Updated API contract docs and tests accordingly.
+- Verification complete:
+  - `pytest -q` => 43/43 tests passed.
+
+## 2026-03-27 08:52 (Asia/Saigon)
+- Implemented log retention/rotation foundation:
+  - Added `src/utils/log_maintenance.py`
+  - Added operational script `scripts/rotate_logs.py`
+  - Added config controls under `operations`:
+    - `log_rotation_max_bytes`
+    - `log_rotation_backup_count`
+- Added tests for rotation logic and config validation.
+- Verification complete:
+  - `pytest -q` => 46/46 tests passed.
+
 ## Next log entry rule
 - Every completed coding/testing step must append one timestamped bullet block.
