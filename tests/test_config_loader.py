@@ -74,3 +74,19 @@ def test_load_config_raises_on_invalid_api_flag_type(tmp_path):
 
     with pytest.raises(ValueError, match="api.allow_proxy_fallback must be a boolean"):
         load_config(str(config_path), env=None)
+
+
+def test_load_config_raises_on_invalid_role_requirements_type(tmp_path):
+    config_path = tmp_path / "config" / "config.yaml"
+    cfg = _minimal_base_config()
+    cfg["api"] = {
+        "brain_age_delta_artifact": "outputs/models/brain_age_delta_model.joblib",
+        "allow_proxy_fallback": True,
+        "require_api_key": False,
+        "enable_role_policy": True,
+        "role_requirements": ["admin"],
+    }
+    _write_yaml(config_path, cfg)
+
+    with pytest.raises(ValueError, match="api.role_requirements must be a dictionary"):
+        load_config(str(config_path), env=None)

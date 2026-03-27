@@ -186,6 +186,21 @@ api:
   allow_proxy_fallback: true
   require_api_key: false
   api_key: "dev-change-me"
+  enable_role_policy: false
+  event_log_path: "logs/events.log"
+  role_requirements:
+    config:
+      - admin
+      - clinician
+    predict_brain_age:
+      - admin
+      - clinician
+      - patient
+    model_metadata:
+      - admin
+      - clinician
+    events_summary:
+      - admin
 
 # Platform Settings
 platform:

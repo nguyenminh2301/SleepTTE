@@ -296,3 +296,153 @@ def test_model_metadata_returns_artifact_details(tmp_path, monkeypatch):
     assert payload["biomarker"] == "brain_age_delta"
     assert payload["artifact_version"] == "v1"
     assert payload["selected_model"] == "ridge"
+
+
+def test_predict_requires_identity_claims_when_role_policy_enabled(monkeypatch):
+    def _mock_load_config(*args, **kwargs):
+        return {
+            "data": {"raw_dir": "data/raw", "processed_dir": "data/processed", "actigraphy_file": "", "mri_file": "", "clinical_file": ""},
+            "output": {},
+            "sleep_features": {"features": []},
+            "causal_inference": {},
+            "statistics": {},
+            "brain_modeling": {},
+            "feature_flags": {},
+            "api": {
+                "brain_age_delta_artifact": "outputs/models/missing.joblib",
+                "allow_proxy_fallback": True,
+                "require_api_key": False,
+                "enable_role_policy": True,
+                "role_requirements": {"predict_brain_age": ["clinician"]},
+            },
+        }
+
+    monkeypatch.setattr(api_module, "load_config", _mock_load_config)
+    api_module._ARTIFACT_CACHE.clear()
+    test_client = TestClient(create_app())
+
+    response = test_client.post(
+        "/predict/brain-age",
+        json={
+            "sleep_efficiency": 78.0,
+            "sleep_fragmentation_index": 12.0,
+            "sleep_regularity_index": 62.0,
+            "social_jet_lag": 2.5,
+            "age": 68.0,
+        },
+    )
+    assert response.status_code == 401
+
+
+def test_predict_forbidden_for_unallowed_role(monkeypatch):
+    def _mock_load_config(*args, **kwargs):
+        return {
+            "data": {"raw_dir": "data/raw", "processed_dir": "data/processed", "actigraphy_file": "", "mri_file": "", "clinical_file": ""},
+            "output": {},
+            "sleep_features": {"features": []},
+            "causal_inference": {},
+            "statistics": {},
+            "brain_modeling": {},
+            "feature_flags": {},
+            "api": {
+                "brain_age_delta_artifact": "outputs/models/missing.joblib",
+                "allow_proxy_fallback": True,
+                "require_api_key": False,
+                "enable_role_policy": True,
+                "role_requirements": {"predict_brain_age": ["clinician"]},
+            },
+        }
+
+    monkeypatch.setattr(api_module, "load_config", _mock_load_config)
+    api_module._ARTIFACT_CACHE.clear()
+    test_client = TestClient(create_app())
+
+    response = test_client.post(
+        "/predict/brain-age",
+        json={
+            "sleep_efficiency": 78.0,
+            "sleep_fragmentation_index": 12.0,
+            "sleep_regularity_index": 62.0,
+            "social_jet_lag": 2.5,
+            "age": 68.0,
+        },
+        headers={"X-User-Id": "u01", "X-User-Role": "patient"},
+    )
+    assert response.status_code == 403
+
+
+def test_predict_accepts_allowed_role(monkeypatch):
+    def _mock_load_config(*args, **kwargs):
+        return {
+            "data": {"raw_dir": "data/raw", "processed_dir": "data/processed", "actigraphy_file": "", "mri_file": "", "clinical_file": ""},
+            "output": {},
+            "sleep_features": {"features": []},
+            "causal_inference": {},
+            "statistics": {},
+            "brain_modeling": {},
+            "feature_flags": {},
+            "api": {
+                "brain_age_delta_artifact": "outputs/models/missing.joblib",
+                "allow_proxy_fallback": True,
+                "require_api_key": False,
+                "enable_role_policy": True,
+                "role_requirements": {"predict_brain_age": ["clinician"]},
+            },
+        }
+
+    monkeypatch.setattr(api_module, "load_config", _mock_load_config)
+    api_module._ARTIFACT_CACHE.clear()
+    test_client = TestClient(create_app())
+
+    response = test_client.post(
+        "/predict/brain-age",
+        json={
+            "sleep_efficiency": 78.0,
+            "sleep_fragmentation_index": 12.0,
+            "sleep_regularity_index": 62.0,
+            "social_jet_lag": 2.5,
+            "age": 68.0,
+        },
+        headers={"X-User-Id": "u01", "X-User-Role": "clinician"},
+    )
+    assert response.status_code == 200
+
+
+def test_events_summary_returns_aggregated_counts(tmp_path, monkeypatch):
+    log_path = tmp_path / "events.log"
+    log_path.write_text(
+        "\n".join(
+            [
+                '{"event_type":"patient_page_view","source":"patient_app","user_id":"P1","payload":{}}',
+                '{"event_type":"patient_page_view","source":"patient_app","user_id":"P2","payload":{}}',
+                '{"event_type":"clinician_page_view","source":"clinician_dashboard","user_id":"C1","payload":{}}',
+            ]
+        ) + "\n",
+        encoding="utf-8",
+    )
+
+    def _mock_load_config(*args, **kwargs):
+        return {
+            "data": {"raw_dir": "data/raw", "processed_dir": "data/processed", "actigraphy_file": "", "mri_file": "", "clinical_file": ""},
+            "output": {},
+            "sleep_features": {"features": []},
+            "causal_inference": {},
+            "statistics": {},
+            "brain_modeling": {},
+            "feature_flags": {},
+            "api": {
+                "event_log_path": str(log_path),
+                "require_api_key": False,
+                "enable_role_policy": False,
+            },
+        }
+
+    monkeypatch.setattr(api_module, "load_config", _mock_load_config)
+    test_client = TestClient(create_app())
+
+    response = test_client.get("/events/summary")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total_events"] == 3
+    assert payload["by_event_type"]["patient_page_view"] == 2
+    assert payload["unique_users"] == 3

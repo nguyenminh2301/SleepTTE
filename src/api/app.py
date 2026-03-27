@@ -18,6 +18,7 @@ from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 
 from src.data.utils import load_config
+from src.utils.event_summary import summarize_event_log
 
 
 class BrainAgePredictionRequest(BaseModel):
@@ -141,6 +142,27 @@ def _enforce_api_key(cfg: dict, x_api_key: str | None) -> None:
         raise HTTPException(status_code=401, detail="Unauthorized: invalid API key.")
 
 
+def _enforce_role_policy(
+    cfg: dict,
+    endpoint_key: str,
+    x_user_id: str | None,
+    x_user_role: str | None
+) -> None:
+    api_cfg = cfg.get("api", {})
+    if not api_cfg.get("enable_role_policy", False):
+        return
+
+    role_requirements = api_cfg.get("role_requirements", {})
+    allowed_roles = role_requirements.get(endpoint_key, [])
+    if not allowed_roles:
+        return
+
+    if not x_user_id or not x_user_role:
+        raise HTTPException(status_code=401, detail="Unauthorized: missing identity claims.")
+    if x_user_role not in allowed_roles:
+        raise HTTPException(status_code=403, detail="Forbidden: role is not allowed for this endpoint.")
+
+
 def create_app() -> FastAPI:
     app = FastAPI(
         title="SleepTTE API",
@@ -161,13 +183,16 @@ def create_app() -> FastAPI:
 
     @app.get("/config")
     def get_config_summary(
-        x_api_key: str | None = Header(default=None, alias="X-API-Key")
+        x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+        x_user_id: str | None = Header(default=None, alias="X-User-Id"),
+        x_user_role: str | None = Header(default=None, alias="X-User-Role"),
     ) -> dict:
         try:
             cfg = load_config()
         except Exception as exc:
             raise HTTPException(status_code=500, detail=f"Failed to load config: {exc}") from exc
         _enforce_api_key(cfg, x_api_key)
+        _enforce_role_policy(cfg, "config", x_user_id, x_user_role)
 
         return {
             "data_paths": cfg.get("data", {}),
@@ -179,10 +204,13 @@ def create_app() -> FastAPI:
     @app.post("/predict/brain-age", response_model=BrainAgePredictionResponse)
     def predict_brain_age(
         payload: BrainAgePredictionRequest,
-        x_api_key: str | None = Header(default=None, alias="X-API-Key")
+        x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+        x_user_id: str | None = Header(default=None, alias="X-User-Id"),
+        x_user_role: str | None = Header(default=None, alias="X-User-Role"),
     ) -> BrainAgePredictionResponse:
         cfg = load_config()
         _enforce_api_key(cfg, x_api_key)
+        _enforce_role_policy(cfg, "predict_brain_age", x_user_id, x_user_role)
         api_cfg = cfg.get("api", {})
         allow_proxy_fallback = api_cfg.get("allow_proxy_fallback", True)
 
@@ -207,16 +235,32 @@ def create_app() -> FastAPI:
 
     @app.get("/model/brain-age/metadata")
     def get_brain_age_model_metadata(
-        x_api_key: str | None = Header(default=None, alias="X-API-Key")
+        x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+        x_user_id: str | None = Header(default=None, alias="X-User-Id"),
+        x_user_role: str | None = Header(default=None, alias="X-User-Role"),
     ) -> dict:
         cfg = load_config()
         _enforce_api_key(cfg, x_api_key)
+        _enforce_role_policy(cfg, "model_metadata", x_user_id, x_user_role)
 
         artifact = _load_brain_age_artifact(cfg)
         if artifact is None:
             raise HTTPException(status_code=404, detail="Brain-age artifact not found.")
 
         return _artifact_metadata(artifact)
+
+    @app.get("/events/summary")
+    def get_event_summary(
+        x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+        x_user_id: str | None = Header(default=None, alias="X-User-Id"),
+        x_user_role: str | None = Header(default=None, alias="X-User-Role"),
+    ) -> dict:
+        cfg = load_config()
+        _enforce_api_key(cfg, x_api_key)
+        _enforce_role_policy(cfg, "events_summary", x_user_id, x_user_role)
+
+        log_path = cfg.get("api", {}).get("event_log_path", "logs/events.log")
+        return summarize_event_log(log_path)
 
     return app
 

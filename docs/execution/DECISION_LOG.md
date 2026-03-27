@@ -41,3 +41,13 @@
 - Decision: Add dedicated model metadata endpoint instead of embedding all details in `/config`.
 - Reason: Separate operational configuration from runtime model state and artifact details.
 - Impact: UI/clients can fetch model serving metadata directly with a stable contract.
+
+## D-2026-03-27-09
+- Decision: Implement role policy as config-driven endpoint rules with identity claims headers.
+- Reason: Enables immediate access control without coupling to a specific identity provider.
+- Impact: Header-based claims are temporary transport; production integration should replace with trusted identity tokens.
+
+## D-2026-03-27-10
+- Decision: Expose event-log summary as API endpoint.
+- Reason: Allows quick observability without separate analytics stack.
+- Impact: Clients/admin dashboards can retrieve usage snapshots directly from backend.

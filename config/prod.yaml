@@ -16,3 +16,4 @@ feature_flags:
 api:
   allow_proxy_fallback: false
   require_api_key: true
+  enable_role_policy: true

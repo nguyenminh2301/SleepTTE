@@ -82,6 +82,12 @@ def validate_config(config: Dict[str, Any]) -> None:
             raise ValueError("api.require_api_key must be a boolean")
         if "api_key" in api and not isinstance(api["api_key"], str):
             raise ValueError("api.api_key must be a string")
+        if "enable_role_policy" in api and not isinstance(api["enable_role_policy"], bool):
+            raise ValueError("api.enable_role_policy must be a boolean")
+        if "event_log_path" in api and not isinstance(api["event_log_path"], str):
+            raise ValueError("api.event_log_path must be a string path")
+        if "role_requirements" in api and not isinstance(api["role_requirements"], dict):
+            raise ValueError("api.role_requirements must be a dictionary")
 
     # Always ensure feature_flags exists for forward-compatible toggles
     if "feature_flags" not in config or not isinstance(config["feature_flags"], dict):

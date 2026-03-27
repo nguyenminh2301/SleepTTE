@@ -132,6 +132,7 @@ Initial endpoints:
 - `GET /config`
 - `POST /predict/brain-age`
 - `GET /model/brain-age/metadata`
+- `GET /events/summary`
 
 Notes:
 
@@ -143,6 +144,9 @@ Notes:
   - `api.require_api_key=true` enables header check on `/config` and `/predict/brain-age`.
   - Send header `X-API-Key: <key>`.
   - You can override configured key with env var `SLEEPTTE_API_KEY`.
+- Role policy (optional):
+  - `api.enable_role_policy=true` turns on role checks using headers `X-User-Id`, `X-User-Role`.
+  - Role rules come from `api.role_requirements` per endpoint.
 
 ## Testing
 

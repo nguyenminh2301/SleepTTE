@@ -24,10 +24,12 @@ Branch: `codex/round3-model-quality-readme`
 | M4.2-04 | Add API auth guard + role checks | DONE | P0 | 2026-03-27 | Added API key guard for config/predict routes |
 | M4.2-05 | Add request event logging for user interactions | DONE | P1 | 2026-03-27 | Added JSONL event logger + platform hooks + tests |
 | M4.2-06 | Add model metadata endpoint for clients | DONE | P1 | 2026-03-27 | Added `/model/brain-age/metadata` + endpoint tests |
-| M4.3-01 | API role policy with user identity claims | TODO | P0 | 2026-03-28 | Move from single API key to role-based checks |
-| M4.3-02 | Event log aggregation/report utility | TODO | P1 | 2026-03-28 | Summarize usage patterns from `logs/events.log` |
+| M4.3-01 | API role policy with user identity claims | DONE | P0 | 2026-03-27 | Added role checks via `X-User-Id` and `X-User-Role` |
+| M4.3-02 | Event log aggregation/report utility | DONE | P1 | 2026-03-27 | Added `summarize_event_log` + `/events/summary` endpoint |
+| M4.3-03 | API contract docs and usage examples | TODO | P1 | 2026-03-28 | OpenAPI + request/response examples |
+| M4.3-04 | Role claim source integration (real identity provider) | TODO | P0 | 2026-03-28 | Replace header-only claims with trusted identity flow |
 
 ## Immediate Next Actions
-1. Add role policy with user identity claims.
-2. Add event aggregation/report utility for `logs/events.log`.
-3. Start API contract docs (OpenAPI usage + examples).
+1. Start API contract docs (OpenAPI usage + examples).
+2. Integrate real identity provider for role claims.
+3. Add event-summary filters (time range, source, event type).

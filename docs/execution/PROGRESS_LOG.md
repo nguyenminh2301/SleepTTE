@@ -102,5 +102,25 @@
 - Verification complete:
   - `pytest -q` => 29/29 tests passed.
 
+## 2026-03-27 07:54 (Asia/Saigon)
+- Implemented M4.3-01 role policy layer for API:
+  - Added optional role enforcement via config (`api.enable_role_policy`).
+  - Identity claims headers:
+    - `X-User-Id`
+    - `X-User-Role`
+  - Endpoint-level role requirements driven by `api.role_requirements`.
+- Added role-policy tests:
+  - missing claims => `401`
+  - disallowed role => `403`
+  - allowed role => `200`
+
+## 2026-03-27 07:56 (Asia/Saigon)
+- Implemented M4.3-02 event aggregation/report utility:
+  - Added `src/utils/event_summary.py`
+  - Added API endpoint `GET /events/summary`
+  - Added tests for summary utility and endpoint behavior.
+- Verification complete:
+  - `pytest -q` => 35/35 tests passed.
+
 ## Next log entry rule
 - Every completed coding/testing step must append one timestamped bullet block.
