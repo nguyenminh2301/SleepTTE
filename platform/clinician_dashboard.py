@@ -9,9 +9,11 @@ import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
 from pathlib import Path
+import os
 import sys
 sys.path.append(str(Path(__file__).parent.parent))
 from src.utils.event_logger import log_event
+from demo_data import generate_demo_sleep_features, generate_demo_clinical, generate_demo_mri
 
 # Page configuration
 st.set_page_config(
@@ -42,6 +44,9 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
+DEMO_MODE = os.getenv("DEMO_MODE", "0").lower() in {"1", "true", "yes"}
+
+
 def load_patient_roster():
     """Load all patients"""
     try:
@@ -60,7 +65,18 @@ def load_patient_roster():
         
         return roster
     except:
-        return pd.DataFrame()
+        if not DEMO_MODE:
+            return pd.DataFrame()
+        sleep_features = generate_demo_sleep_features(n_patients=30)
+        clinical = generate_demo_clinical(n_patients=30)
+        mri = generate_demo_mri(n_patients=30)
+        roster = sleep_features.merge(clinical, on='participant_id', how='left')
+        roster = roster.merge(mri[['participant_id', 'brain_age_delta', 'hippocampal_volume']], on='participant_id', how='left')
+        roster['risk_score'] = roster.apply(calculate_risk_score_row, axis=1)
+        roster['risk_category'] = roster['risk_score'].apply(lambda x:
+            'High' if x >= 0.67 else ('Moderate' if x >= 0.33 else 'Low')
+        )
+        return roster
 
 
 def calculate_risk_score_row(row):
@@ -87,6 +103,8 @@ def calculate_risk_score_row(row):
 
 def main():
     """Main clinician dashboard"""
+    if DEMO_MODE:
+        st.sidebar.caption("Demo mode enabled")
     
     # Header
     st.markdown('<div class="main-header">⚕️ Clinician Dashboard: Sleep & Brain Health</div>', unsafe_allow_html=True)

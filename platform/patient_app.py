@@ -9,15 +9,18 @@ import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
 from pathlib import Path
+import os
 import sys
 sys.path.append(str(Path(__file__).parent.parent))
 
 from src.data.utils import load_config
 from src.utils.event_logger import log_event
+from demo_data import generate_demo_sleep_features
 import logging
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+DEMO_MODE = os.getenv("DEMO_MODE", "0").lower() in {"1", "true", "yes"}
 
 # Page configuration
 st.set_page_config(
@@ -68,7 +71,13 @@ def load_patient_data(patient_id):
         patient_sleep = sleep_features[sleep_features['participant_id'] == patient_id].iloc[0]
         return patient_sleep.to_dict()
     except:
-        return None
+        if not DEMO_MODE:
+            return None
+        demo_df = generate_demo_sleep_features(n_patients=30)
+        match = demo_df[demo_df["participant_id"] == patient_id]
+        if match.empty:
+            return demo_df.iloc[0].to_dict()
+        return match.iloc[0].to_dict()
 
 
 def calculate_risk_score(patient_data):
@@ -173,6 +182,8 @@ def plot_circadian_rhythm(patient_data):
 
 def main():
     """Main application"""
+    if DEMO_MODE:
+        st.sidebar.caption("Demo mode enabled")
     
     # Header
     st.markdown('<div class="main-header">🧠 Sleep & Brain Health Monitor</div>', unsafe_allow_html=True)

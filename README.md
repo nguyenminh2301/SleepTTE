@@ -120,6 +120,25 @@ streamlit run platform/patient_app.py
 streamlit run platform/clinician_dashboard.py
 ```
 
+### Free demo mode (for public experience)
+
+Enable demo mode to run the apps without local processed datasets:
+
+```powershell
+pip install -r requirements-demo.txt
+$env:DEMO_MODE="1"
+streamlit run platform/patient_app.py
+```
+
+Demo mode behavior:
+
+- Auto-generates synthetic patient/clinical/MRI-like records for UI interaction.
+- Keeps full training/modeling pipeline optional for local advanced users.
+
+For deployment on Hugging Face Spaces (free tier), see:
+
+- `docs/deployment/FREE_DEMO_DEPLOYMENT.md`
+
 ## Run API Skeleton (Round 4.2)
 
 ```bash
